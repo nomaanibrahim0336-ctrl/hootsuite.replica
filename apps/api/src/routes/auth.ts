@@ -2,16 +2,21 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../prisma';
 import { signTokens, verifyRefresh } from '../auth';
+import { validateBody, rules } from '../validate';
 
 const router = Router();
 
 const publicUser = (u: any) => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt });
 
-router.post('/register', async (req, res) => {
+router.post(
+  '/register',
+  validateBody({
+    email: { type: 'string', required: true, pattern: rules.EMAIL },
+    password: { type: 'string', required: true, minLength: 6, maxLength: 128 },
+    name: { type: 'string', required: true, minLength: 1, maxLength: 120 },
+  }),
+  async (req, res) => {
   const { email, password, name } = req.body ?? {};
-  if (!email || !password || !name) {
-    return res.status(400).json({ success: false, error: 'email, password and name are required' });
-  }
   if (await prisma.user.findUnique({ where: { email } })) {
     return res.status(409).json({ success: false, error: 'Email already registered' });
   }

@@ -4,6 +4,7 @@ import { publishDuePosts } from '../scheduler';
 import { requirePermission, PERMISSIONS } from '../rbac';
 import { logAudit } from '../audit';
 import { AuthedRequest } from '../auth';
+import { validateBody } from '../validate';
 
 const router = Router();
 
@@ -40,9 +41,11 @@ router.get('/:id', async (req, res) => {
   res.json({ success: true, data: mapPost(p) });
 });
 
-router.post('/', async (req, res) => {
+router.post(
+  '/',
+  validateBody({ content: { type: 'string', required: true, minLength: 1, maxLength: 5000 } }),
+  async (req, res) => {
   const { content, networks = [], status = 'draft', scheduledAt, hashtags } = req.body ?? {};
-  if (!content) return res.status(400).json({ success: false, error: 'content is required' });
   const p = await prisma.post.create({
     data: {
       content,

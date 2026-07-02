@@ -95,6 +95,22 @@ Disable with `SCHEDULER_ENABLED=false`.
 - **Report export**: `/analytics/reports/:id/export?format=csv|pdf` streams a real CSV or a
   generated PDF (via pdfkit) built from live data.
 
+## Phase 8 — Testing + hardening (complete)
+
+- **Integration tests** (Jest + Supertest, `apps/api/test/`): 22 tests / 4 suites covering
+  auth + JWT gating, posts CRUD + schedule/publish + scheduler + approval workflow, inbox,
+  listening ingestion + sentiment, analytics + CSV/PDF export, AI provider status +
+  generation, advocacy, and RBAC (viewer 403 / owner 200). Run against an isolated SQLite
+  test DB.
+
+  ```bash
+  npm test --workspace=@hootsuite/api
+  ```
+
+- **Hardening**: extracted the Express app into `src/app.ts` (testable, no listener);
+  input validation middleware (`src/validate.ts`) on auth register + post create; malformed
+  JSON → `400`; unknown routes → `404`; rate limiting disabled under `NODE_ENV=test`.
+
 ## Phase 5 — Real AI (multi-provider, complete)
 
 A pluggable LLM layer (`apps/api/src/llm/`) with a common `LLMProvider` interface and
