@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Zap } from 'lucide-react';
-import { api, setToken } from '@/lib/api';
+import { api, setToken, startSession } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,6 +21,7 @@ export default function LoginPage() {
     } catch {
       // API unavailable — proceed in demo mode.
     } finally {
+      startSession();
       router.push('/dashboard');
     }
   };

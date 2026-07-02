@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 import { useUiStore } from '@/lib/ui-store';
 import { currentUser, messages } from '@/lib/mock';
 import { initials } from '@/lib/utils';
+import { endSession } from '@/lib/api';
 import {
   LayoutDashboard,
   Send,
@@ -19,6 +21,7 @@ import {
   HelpCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
 } from 'lucide-react';
 
 const unreadCount = messages.filter((m) => !m.isRead).length;
@@ -103,6 +106,7 @@ function NavTab({
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNav } = useUiStore();
 
   return (
@@ -173,6 +177,15 @@ export function Sidebar() {
           </span>
           {!sidebarCollapsed && <span className="truncate text-xs text-[#B0B8C4]">{currentUser.name}</span>}
         </div>
+
+        <NavTab
+          as="button"
+          onClick={() => { endSession(); router.push('/login'); }}
+          label="Log out"
+          icon={LogOut}
+          active={false}
+          collapsed={sidebarCollapsed}
+        />
 
         <NavTab
           as="button"

@@ -5,6 +5,7 @@ import { Topbar } from './Topbar';
 import { Composer } from './Composer';
 import { CommandPalette } from './CommandPalette';
 import { Toaster } from './Toast';
+import { AuthGuard } from './AuthGuard';
 import { useUiStore } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +15,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const setMobileNav = useUiStore((s) => s.setMobileNav);
 
   return (
+    <AuthGuard>
     <div className="min-h-screen">
       {/* Mobile overlay behind the drawer */}
       {mobileNavOpen && (
@@ -30,5 +32,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <CommandPalette />
       <Toaster />
     </div>
+    </AuthGuard>
   );
 }

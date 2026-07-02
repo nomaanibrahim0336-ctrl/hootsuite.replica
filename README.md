@@ -15,6 +15,29 @@ Built as a monorepo with npm workspaces.
 └── docker-compose.yml
 ```
 
+## Phase 9 — Integration, auth & Supabase (complete)
+
+- **Auth guard**: the app shell (`AuthGuard`) redirects unauthenticated visitors to
+  `/login`; login/register start a session and store the JWT (offline demo fallback still
+  works). **Log out** in the sidebar clears the session.
+- **Admin → Connections** (`/settings/connections`): a control panel showing live health of
+  the database (Supabase), the backend REST API, social-network OAuth connections, and AI
+  providers. Reached from Settings or the ⌘K palette.
+- **Supabase-ready**: a provisioned Supabase Postgres project (`kvrhkseifkwshnqfvldu`,
+  ap-northeast-1) is wired into the Connections panel. Switch the API from SQLite to Supabase
+  in one step:
+
+  ```bash
+  # apps/api/.env → set DATABASE_URL to your Supabase connection string, then:
+  npm run db:generate:supabase --workspace=@hootsuite/api
+  npm run db:push:supabase     --workspace=@hootsuite/api
+  npm run db:seed              --workspace=@hootsuite/api
+  ```
+
+  The Postgres schema lives at `apps/api/prisma/schema.postgres.prisma` (identical models —
+  JSON stored as text — so no app-code changes). The web app reads the Supabase URL + anon
+  key from `NEXT_PUBLIC_SUPABASE_*` (see `apps/web/.env.example`).
+
 ## Phase 1 — Frontend (complete)
 
 A fully navigable dashboard driven by realistic mock data. No backend required to explore it.

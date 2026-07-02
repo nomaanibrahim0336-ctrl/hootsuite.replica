@@ -6,7 +6,8 @@ import { networks as seedNetworks, team, currentUser, auditLog } from '@/lib/moc
 import { NETWORK_META, formatNumber } from '@/lib/utils';
 import type { Network, UserRole } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Plus, ScrollText } from 'lucide-react';
+import { Plus, ScrollText, Plug, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { AiSettingsPanel } from '@/components/AiSettingsPanel';
 import { toast } from '@/components/Toast';
 
@@ -37,6 +38,20 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Manage your profile, connected accounts and team." />
 
       <div className="space-y-6">
+        {/* Connections shortcut */}
+        <Link href="/settings/connections">
+          <Card className="flex items-center gap-4 p-5 transition hover:border-accent hover:shadow-sm">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent-light to-accent/20">
+              <Plug className="h-5 w-5 text-accent-deep" />
+            </span>
+            <div className="flex-1">
+              <p className="font-semibold text-slate-800">Connections</p>
+              <p className="text-sm text-slate-500">Database (Supabase), backend API, social OAuth & AI providers.</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-slate-400" />
+          </Card>
+        </Link>
+
         {/* Profile */}
         <Card>
           <CardHeader title="Profile" />

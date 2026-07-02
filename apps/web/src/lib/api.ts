@@ -4,6 +4,7 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const TOKEN_KEY = 'socialhub_token';
+const SESSION_KEY = 'socialhub_session';
 
 export function setToken(token: string) {
   if (typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, token);
@@ -13,6 +14,22 @@ export function getToken(): string | null {
 }
 export function clearToken() {
   if (typeof window !== 'undefined') localStorage.removeItem(TOKEN_KEY);
+}
+
+// Session marker — set on login/register (even in offline demo mode so the
+// auth guard lets the user in). Independent of the JWT, which only exists
+// when the live API is reachable.
+export function startSession() {
+  if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, '1');
+}
+export function hasSession(): boolean {
+  return typeof window !== 'undefined' && localStorage.getItem(SESSION_KEY) === '1';
+}
+export function endSession() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 export interface AiProvider {

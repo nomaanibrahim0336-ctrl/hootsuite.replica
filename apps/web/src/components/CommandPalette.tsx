@@ -6,7 +6,7 @@ import { useUiStore } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Send, CalendarDays, Inbox, Radio, BarChart2, Settings,
-  Megaphone, Search, Moon, Plus,
+  Megaphone, Search, Moon, Plus, Plug,
 } from 'lucide-react';
 
 export function CommandPalette() {
@@ -24,6 +24,7 @@ export function CommandPalette() {
     { label: 'Go to Analytics', icon: BarChart2, run: () => router.push('/analytics') },
     { label: 'Go to Amplify', icon: Megaphone, run: () => router.push('/amplify') },
     { label: 'Go to Settings', icon: Settings, run: () => router.push('/settings') },
+    { label: 'Go to Connections', icon: Plug, run: () => router.push('/settings/connections') },
     { label: 'Create a new post', icon: Plus, run: () => openComposer() },
     { label: 'Toggle dark mode', icon: Moon, run: () => toggleTheme() },
   ];
