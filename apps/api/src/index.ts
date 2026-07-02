@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import { requireAuth } from './auth';
+import { startScheduler } from './scheduler';
 import authRoutes from './routes/auth';
 import networkRoutes from './routes/networks';
 import postRoutes from './routes/posts';
@@ -12,6 +13,8 @@ import listeningRoutes from './routes/listening';
 import analyticsRoutes from './routes/analytics';
 import aiRoutes from './routes/ai';
 import teamRoutes from './routes/teams';
+import advocacyRoutes from './routes/advocacy';
+import auditRoutes from './routes/audit';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -45,6 +48,8 @@ app.use('/api/listening', requireAuth, listeningRoutes);
 app.use('/api/analytics', requireAuth, analyticsRoutes);
 app.use('/api/ai', requireAuth, aiRoutes);
 app.use('/api/teams', requireAuth, teamRoutes);
+app.use('/api/advocacy', requireAuth, advocacyRoutes);
+app.use('/api/audit', requireAuth, auditRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, error: 'Not found' }));
 
@@ -56,6 +61,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 app.listen(PORT, () => {
   console.log(`🚀 SocialHub API listening on http://localhost:${PORT}`);
+  startScheduler();
 });
 
 export default app;

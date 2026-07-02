@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
+import { requirePermission, PERMISSIONS } from '../rbac';
+import { logAudit } from '../audit';
+import { AuthedRequest } from '../auth';
 
 const router = Router();
 
@@ -11,24 +14,27 @@ const list = async (_req: any, res: any) => {
 router.get('/', list);
 router.get('/members', list);
 
-router.post('/members', async (req, res) => {
+router.post('/members', requirePermission(PERMISSIONS.MANAGE_TEAM), async (req: AuthedRequest, res) => {
   const { name, email, role = 'viewer' } = req.body ?? {};
   if (!name || !email) return res.status(400).json({ success: false, error: 'name and email are required' });
   const member = await prisma.teamMember.create({ data: { name, email, role } });
+  await logAudit(req.userId, 'team.invite', 'teamMember', member.id, { email, role });
   res.status(201).json({ success: true, data: member });
 });
 
-router.put('/members/:id', async (req, res) => {
+router.put('/members/:id', requirePermission(PERMISSIONS.MANAGE_TEAM), async (req: AuthedRequest, res) => {
   const m = await prisma.teamMember.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Member not found' });
   const updated = await prisma.teamMember.update({ where: { id: m.id }, data: req.body ?? {} });
+  await logAudit(req.userId, 'team.update', 'teamMember', m.id);
   res.json({ success: true, data: updated });
 });
 
-router.delete('/members/:id', async (req, res) => {
+router.delete('/members/:id', requirePermission(PERMISSIONS.MANAGE_TEAM), async (req: AuthedRequest, res) => {
   const m = await prisma.teamMember.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Member not found' });
   await prisma.teamMember.delete({ where: { id: m.id } });
+  await logAudit(req.userId, 'team.remove', 'teamMember', m.id);
   res.json({ success: true, data: m });
 });
 

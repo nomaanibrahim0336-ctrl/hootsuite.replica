@@ -23,6 +23,9 @@ export const mapPost = (p: any) => ({
   scheduledAt: p.scheduledAt?.toISOString?.() ?? p.scheduledAt ?? undefined,
   publishedAt: p.publishedAt?.toISOString?.() ?? p.publishedAt ?? undefined,
   engagements: fromJson<any>(p.engagements, undefined),
+  approvalStatus: p.approvalStatus ?? 'none',
+  submittedBy: p.submittedBy ?? undefined,
+  approvedBy: p.approvedBy ?? undefined,
   createdAt: p.createdAt,
   updatedAt: p.updatedAt,
 });

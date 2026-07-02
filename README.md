@@ -66,14 +66,44 @@ Prisma; data persists across restarts. Seed with `npm run db:seed --workspace=@h
 |-------|--------|
 | Auth (public) | `POST /api/auth/register` · `login` · `refresh` · `logout` |
 | Networks | `GET /api/networks` · `POST /` · `DELETE /:id` · `GET /:id/status` |
-| Posts | `GET /api/posts` · `POST /` · `GET/PUT/DELETE /:id` · `POST /:id/schedule` · `/:id/publish` · `GET /calendar` · `POST /bulk` |
+| Posts | `GET /api/posts` · `POST /` · `GET/PUT/DELETE /:id` · `POST /:id/schedule` · `/:id/publish` · `/:id/submit` · `/:id/approve` · `/:id/reject` · `POST /run-scheduler` · `GET /calendar` · `POST /bulk` |
 | Inbox | `GET /api/inbox` · `PUT /:id/read` · `POST /:id/reply` · `PUT /:id/assign` · `GET/POST /saved-replies` |
-| Listening | `GET/POST /api/listening/streams` · `GET /mentions` · `GET /sentiment` |
-| Analytics | `GET /api/analytics/metrics` · `GET/POST /reports` · `GET/PUT/DELETE /reports/:id` · `POST /reports/:id/export` |
+| Listening | `GET/POST /api/listening/streams` · `POST /streams/:id/ingest` · `GET /mentions` · `GET /sentiment` |
+| Analytics | `GET /api/analytics/metrics` · `GET/POST /reports` · `GET/PUT/DELETE /reports/:id` · `POST /reports/:id/export?format=csv\|pdf` |
 | AI | `POST /api/ai/caption` · `/hashtags` · `/ideas` |
-| Teams | `GET /api/teams` · `GET/POST/PUT/DELETE /teams/members[/:id]` |
+| Teams | `GET /api/teams` · `GET/POST/PUT/DELETE /teams/members[/:id]` (writes require MANAGE_TEAM) |
+| Advocacy | `GET/POST /api/advocacy/content` · `POST /content/:id/share` · `GET /analytics` |
+| Audit | `GET /api/audit` (requires VIEW_AUDIT) |
 
 All routes except `/api/auth/*` and `/health` require a `Bearer <token>` header.
+
+## Phase 4 — Scheduling engine (complete)
+
+In-process poller (`apps/api/src/scheduler.ts`) scans the DB every 15s and auto-publishes
+posts whose `scheduledAt` has passed, with up to 3 delivery attempts + exponential backoff;
+failures are marked `failed`. Trigger manually with `POST /api/posts/run-scheduler`. Swap
+the publish body into a BullMQ+Redis worker for production (same logic, `REDIS_URL`).
+Disable with `SCHEDULER_ENABLED=false`.
+
+## Phase 6 — Listening + Analytics pipeline (complete)
+
+- **Sentiment classifier** (`src/sentiment.ts`): lexicon-based positive/negative/neutral.
+- **Ingestion**: `POST /listening/streams/:id/ingest` pulls sample mentions, classifies
+  sentiment, stores them, and bumps the stream's mention count.
+- **Analytics rollups**: `/analytics/metrics` computes impressions, engagements and the
+  network breakdown from real published-post engagement data in the DB.
+- **Report export**: `/analytics/reports/:id/export?format=csv|pdf` streams a real CSV or a
+  generated PDF (via pdfkit) built from live data.
+
+## Phase 7 — Collaboration + Employee Advocacy (complete)
+
+- **RBAC** (`src/rbac.ts`): owner/admin/editor/viewer roles → permission sets, enforced by
+  `requirePermission` middleware (team management, approvals, advocacy authoring, audit).
+- **Approval workflow**: `POST /posts/:id/submit|approve|reject` with `approvalStatus`
+  (none→pending→approved/rejected); approve/reject require APPROVE_POST.
+- **Audit trail** (`src/audit.ts` + `AuditLog`): key mutations logged; `GET /api/audit`.
+- **Employee Advocacy (Amplify)**: content hub, one-click share, and analytics with a
+  reach leaderboard.
 
 ### Frontend ↔ backend wiring
 

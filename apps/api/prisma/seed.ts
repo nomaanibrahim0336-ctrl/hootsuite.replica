@@ -95,6 +95,11 @@ async function main() {
     ],
   });
 
+  const c1 = await prisma.advocacyContent.create({ data: { title: 'Product launch announcement', body: '🚀 SocialHub AI is here! Share the news with your network.', category: 'Launch' } });
+  await prisma.advocacyContent.create({ data: { title: 'We are hiring!', body: 'Join our team — check out open roles at socialhub.app/careers', category: 'Recruiting' } });
+  await prisma.advocacyShare.create({ data: { contentId: c1.id, employeeName: 'Sarah Lee', employeeEmail: 'sarah@socialhub.app', reach: 3200 } });
+  await prisma.advocacyShare.create({ data: { contentId: c1.id, employeeName: 'David Okafor', employeeEmail: 'david@socialhub.app', reach: 1800 } });
+
   console.log('✅ Seed complete');
 }
 

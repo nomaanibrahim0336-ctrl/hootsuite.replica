@@ -1,7 +1,17 @@
 import { Router } from 'express';
 import { prisma, mapPost, toJson } from '../prisma';
+import { publishDuePosts } from '../scheduler';
+import { requirePermission, PERMISSIONS } from '../rbac';
+import { logAudit } from '../audit';
+import { AuthedRequest } from '../auth';
 
 const router = Router();
+
+// Manually run the scheduler now (publishes any due posts). Handy for demos.
+router.post('/run-scheduler', async (_req, res) => {
+  const published = await publishDuePosts();
+  res.json({ success: true, data: { published } });
+});
 
 router.get('/', async (req, res) => {
   const { status } = req.query;
@@ -100,7 +110,41 @@ router.post('/:id/schedule', async (req, res) => {
   res.json({ success: true, data: mapPost(p) });
 });
 
-router.post('/:id/publish', async (req, res) => {
+// --- Approval workflow ---
+router.post('/:id/submit', async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
+  const p = await prisma.post.update({
+    where: { id: req.params.id },
+    data: { approvalStatus: 'pending', submittedBy: req.userId ?? null },
+  });
+  await logAudit(req.userId, 'post.submit', 'post', p.id);
+  res.json({ success: true, data: mapPost(p) });
+});
+
+router.post('/:id/approve', requirePermission(PERMISSIONS.APPROVE_POST), async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
+  const p = await prisma.post.update({
+    where: { id: req.params.id },
+    data: { approvalStatus: 'approved', approvedBy: req.userId ?? null },
+  });
+  await logAudit(req.userId, 'post.approve', 'post', p.id);
+  res.json({ success: true, data: mapPost(p) });
+});
+
+router.post('/:id/reject', requirePermission(PERMISSIONS.APPROVE_POST), async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
+  const p = await prisma.post.update({
+    where: { id: req.params.id },
+    data: { approvalStatus: 'rejected', approvedBy: req.userId ?? null },
+  });
+  await logAudit(req.userId, 'post.reject', 'post', p.id, { reason: req.body?.reason });
+  res.json({ success: true, data: mapPost(p) });
+});
+
+router.post('/:id/publish', async (req: AuthedRequest, res) => {
   const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({

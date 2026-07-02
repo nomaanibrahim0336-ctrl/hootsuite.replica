@@ -46,8 +46,44 @@ model Post {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // Approval workflow
+  approvalStatus String  @default("none") // none | pending | approved | rejected
+  submittedBy    String?
+  approvedBy     String?
+
   author   User?   @relation(fields: [authorId], references: [id])
   authorId String?
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String?
+  userId    String?
+  meta      String? // JSON-encoded details
+  createdAt DateTime @default(now())
+}
+
+model AdvocacyContent {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  category  String   @default("General")
+  createdAt DateTime @default(now())
+
+  shares AdvocacyShare[]
+}
+
+model AdvocacyShare {
+  id            String   @id @default(uuid())
+  employeeName  String
+  employeeEmail String
+  reach         Int      @default(0)
+  sharedAt      DateTime @default(now())
+
+  content   AdvocacyContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String
 }
 
 model Message {
