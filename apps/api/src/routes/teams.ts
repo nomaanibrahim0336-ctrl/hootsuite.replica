@@ -25,7 +25,13 @@ router.post('/members', requirePermission(PERMISSIONS.MANAGE_TEAM), async (req: 
 router.put('/members/:id', requirePermission(PERMISSIONS.MANAGE_TEAM), async (req: AuthedRequest, res) => {
   const m = await prisma.teamMember.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Member not found' });
-  const updated = await prisma.teamMember.update({ where: { id: m.id }, data: req.body ?? {} });
+  // Whitelist updatable fields — never spread the raw body into Prisma.
+  const b = req.body ?? {};
+  const data: { name?: string; email?: string; role?: string } = {};
+  if (typeof b.name === 'string') data.name = b.name;
+  if (typeof b.email === 'string') data.email = b.email;
+  if (typeof b.role === 'string') data.role = b.role;
+  const updated = await prisma.teamMember.update({ where: { id: m.id }, data });
   await logAudit(req.userId, 'team.update', 'teamMember', m.id);
   res.json({ success: true, data: updated });
 });

@@ -25,6 +25,13 @@ describe('Auth', () => {
     expect(bad2.status).toBe(400);
   });
 
+  it('rejects a malformed login without crashing (400, not a hang/500)', async () => {
+    const empty = await request(app).post('/api/auth/login').send({});
+    expect(empty.status).toBe(400);
+    const badEmail = await request(app).post('/api/auth/login').send({ email: 'nope', password: 'x' });
+    expect(badEmail.status).toBe(400);
+  });
+
   it('blocks protected routes without a token (401)', async () => {
     const res = await request(app).get('/api/posts');
     expect(res.status).toBe(401);

@@ -26,13 +26,17 @@ router.post(
   res.status(201).json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
 });
 
-router.post('/login', async (req, res) => {
+router.post(
+  '/login',
+  validateBody({ email: { type: 'string', required: true, pattern: rules.EMAIL } }),
+  async (req, res) => {
   const { email, password } = req.body ?? {};
+  // `email` is guaranteed present by validateBody, so findUnique is safe.
   let user = await prisma.user.findUnique({ where: { email } });
   // Demo convenience: unknown email creates a session user.
   if (!user) {
     user = await prisma.user.create({
-      data: { email: email || 'demo@socialhub.app', name: 'Demo User', passwordHash: '', role: 'owner' },
+      data: { email, name: 'Demo User', passwordHash: '', role: 'owner' },
     });
     return res.json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
   }

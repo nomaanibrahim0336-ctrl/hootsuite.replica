@@ -22,6 +22,17 @@ export function createApp() {
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
 
+  // Safety net: bound any request (e.g. an unhandled async rejection that never
+  // sends a response) to 15s so a stuck handler can't hold the connection open.
+  if (process.env.NODE_ENV !== 'test') {
+    app.use((_req, res, next) => {
+      res.setTimeout(15000, () => {
+        if (!res.headersSent) res.status(503).json({ success: false, error: 'Request timed out' });
+      });
+      next();
+    });
+  }
+
   // Rate limiting: 100 req/min per IP on the API surface. Disabled under test.
   if (process.env.NODE_ENV !== 'test') {
     app.use(

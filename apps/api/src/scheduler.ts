@@ -11,6 +11,7 @@ const INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 15000;
 const MAX_ATTEMPTS = 3;
 
 let timer: NodeJS.Timeout | null = null;
+let running = false; // guards against overlapping runs (interval + manual trigger)
 
 /** Simulate delivering a post to each social network. ~5% transient failure. */
 async function deliver(post: { id: string; networks: string[] }): Promise<void> {
@@ -19,6 +20,18 @@ async function deliver(post: { id: string; networks: string[] }): Promise<void> 
 
 /** Publish every scheduled post whose time has come. Returns count published. */
 export async function publishDuePosts(nowMs = Date.now()): Promise<number> {
+  // Prevent two concurrent runs from picking up (and double-publishing) the
+  // same due posts before either has flipped their status.
+  if (running) return 0;
+  running = true;
+  try {
+    return await runDuePosts(nowMs);
+  } finally {
+    running = false;
+  }
+}
+
+async function runDuePosts(nowMs: number): Promise<number> {
   const due = await prisma.post.findMany({
     where: { status: 'scheduled', scheduledAt: { lte: new Date(nowMs) } },
   });
