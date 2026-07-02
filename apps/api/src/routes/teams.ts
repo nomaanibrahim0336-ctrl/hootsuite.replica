@@ -1,31 +1,35 @@
 import { Router } from 'express';
-import { db, uid } from '../data';
+import { prisma } from '../prisma';
 
 const router = Router();
 
-router.get('/', (_req, res) => res.json({ success: true, data: db.team }));
-router.get('/members', (_req, res) => res.json({ success: true, data: db.team }));
+const list = async (_req: any, res: any) => {
+  const data = await prisma.teamMember.findMany({ orderBy: { joinedAt: 'asc' } });
+  res.json({ success: true, data });
+};
 
-router.post('/members', (req, res) => {
+router.get('/', list);
+router.get('/members', list);
+
+router.post('/members', async (req, res) => {
   const { name, email, role = 'viewer' } = req.body ?? {};
   if (!name || !email) return res.status(400).json({ success: false, error: 'name and email are required' });
-  const member = { id: uid(), name, email, role, joinedAt: new Date().toISOString() };
-  db.team.push(member);
+  const member = await prisma.teamMember.create({ data: { name, email, role } });
   res.status(201).json({ success: true, data: member });
 });
 
-router.put('/members/:id', (req, res) => {
-  const m = db.team.find((x) => x.id === req.params.id);
+router.put('/members/:id', async (req, res) => {
+  const m = await prisma.teamMember.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Member not found' });
-  Object.assign(m, req.body);
-  res.json({ success: true, data: m });
+  const updated = await prisma.teamMember.update({ where: { id: m.id }, data: req.body ?? {} });
+  res.json({ success: true, data: updated });
 });
 
-router.delete('/members/:id', (req, res) => {
-  const i = db.team.findIndex((x) => x.id === req.params.id);
-  if (i === -1) return res.status(404).json({ success: false, error: 'Member not found' });
-  const [removed] = db.team.splice(i, 1);
-  res.json({ success: true, data: removed });
+router.delete('/members/:id', async (req, res) => {
+  const m = await prisma.teamMember.findUnique({ where: { id: req.params.id } });
+  if (!m) return res.status(404).json({ success: false, error: 'Member not found' });
+  await prisma.teamMember.delete({ where: { id: m.id } });
+  res.json({ success: true, data: m });
 });
 
 export default router;

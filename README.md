@@ -46,8 +46,19 @@ rate limiting (100 req/min) and an in-memory mock data store. All routes return
 
 ```bash
 cp apps/api/.env.example apps/api/.env
-npm run dev:api      # http://localhost:3001  (GET /health to verify)
+npm run db:push --workspace=@hootsuite/api    # create the SQLite schema
+npm run db:seed --workspace=@hootsuite/api    # load demo data
+npm run dev:api                               # http://localhost:3001 (GET /health)
 ```
+
+## Phase 3 — Persistence (complete)
+
+The API is backed by a real database via **Prisma**. Dev uses **SQLite** (zero setup,
+runnable anywhere); production switches the `provider` in `apps/api/prisma/schema.prisma`
+to `postgresql` and points `DATABASE_URL` at the Postgres in `docker-compose.yml` — the
+models are provider-agnostic. Models: User, Network, Post, Message, MessageReply,
+SavedReply, Stream, Mention, Report, TeamMember. All route handlers read/write through
+Prisma; data persists across restarts. Seed with `npm run db:seed --workspace=@hootsuite/api`.
 
 ### Endpoints
 

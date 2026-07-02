@@ -10,3 +10,8 @@ build/
 .turbo/
 coverage/
 next-env.d.ts
+
+# Prisma / SQLite dev database
+*.db
+*.db-journal
+apps/api/prisma/dev.db*

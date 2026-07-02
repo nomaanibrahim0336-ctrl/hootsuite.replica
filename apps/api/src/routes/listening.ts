@@ -1,34 +1,42 @@
 import { Router } from 'express';
-import { db, uid, sentimentTrend } from '../data';
+import { prisma, mapStream, mapMention, toJson } from '../prisma';
+import { sentimentTrend } from '../analytics';
 
 const router = Router();
 
-router.get('/streams', (_req, res) => res.json({ success: true, data: db.streams }));
-
-router.post('/streams', (req, res) => {
-  const { name, keywords = [], sources = [] } = req.body ?? {};
-  if (!name) return res.status(400).json({ success: false, error: 'name is required' });
-  const stream = {
-    id: uid(), name,
-    keywords: Array.isArray(keywords) ? keywords : String(keywords).split(',').map((k) => k.trim()),
-    sources, isActive: true, mentionCount: 0, createdAt: new Date().toISOString(),
-  };
-  db.streams.unshift(stream);
-  res.status(201).json({ success: true, data: stream });
+router.get('/streams', async (_req, res) => {
+  const rows = await prisma.stream.findMany({ orderBy: { createdAt: 'desc' } });
+  res.json({ success: true, data: rows.map(mapStream) });
 });
 
-router.get('/mentions', (req, res) => {
+router.post('/streams', async (req, res) => {
+  const { name, keywords = [], sources = [] } = req.body ?? {};
+  if (!name) return res.status(400).json({ success: false, error: 'name is required' });
+  const kw = Array.isArray(keywords) ? keywords : String(keywords).split(',').map((k) => k.trim());
+  const s = await prisma.stream.create({
+    data: { name, keywords: toJson(kw), sources: toJson(sources), isActive: true, mentionCount: 0 },
+  });
+  res.status(201).json({ success: true, data: mapStream(s) });
+});
+
+router.get('/mentions', async (req, res) => {
   const { streamId, sentiment } = req.query;
-  let data = db.mentions;
-  if (streamId) data = data.filter((m) => m.streamId === streamId);
-  if (sentiment) data = data.filter((m) => m.sentiment === sentiment);
+  const rows = await prisma.mention.findMany({
+    where: {
+      ...(streamId ? { streamId: String(streamId) } : {}),
+      ...(sentiment ? { sentiment: String(sentiment) } : {}),
+    },
+    orderBy: { timestamp: 'desc' },
+  });
+  const data = rows.map(mapMention);
   res.json({ success: true, data, total: data.length });
 });
 
-router.get('/sentiment', (_req, res) => {
-  const total = db.mentions.length || 1;
-  const pos = db.mentions.filter((m) => m.sentiment === 'positive').length;
-  const neg = db.mentions.filter((m) => m.sentiment === 'negative').length;
+router.get('/sentiment', async (_req, res) => {
+  const all = await prisma.mention.findMany();
+  const total = all.length || 1;
+  const pos = all.filter((m) => m.sentiment === 'positive').length;
+  const neg = all.filter((m) => m.sentiment === 'negative').length;
   res.json({
     success: true,
     data: {
