@@ -18,6 +18,20 @@ import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/comp
 import { analyticsMetrics, analyticsTrend, networkBreakdown, reports, reportTemplates } from '@/lib/mock';
 import { formatNumber, cn, NETWORK_META } from '@/lib/utils';
 import { format } from 'date-fns';
+import { toast } from '@/components/Toast';
+
+function downloadCsv(name: string) {
+  const header = 'Metric,Value,Change\n';
+  const rows = analyticsMetrics.map((m) => `${m.label},${m.value},${m.change}%`).join('\n');
+  const blob = new Blob([`Report,${name}\n\n${header}${rows}\n`], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success('Report exported as CSV');
+}
 
 export default function AnalyticsPage() {
   return (
@@ -25,7 +39,7 @@ export default function AnalyticsPage() {
       <PageHeader
         title="Analytics & Reporting"
         subtitle="Measure performance and prove ROI across every network."
-        action={<Button variant="secondary"><Download className="h-4 w-4" /> Export</Button>}
+        action={<Button variant="secondary" onClick={() => downloadCsv('Analytics Overview')}><Download className="h-4 w-4" /> Export</Button>}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,7 +115,7 @@ export default function AnalyticsPage() {
                 <div className="flex -space-x-1.5">
                   {r.networks.map((n) => <NetworkChip key={n} type={n} size={20} />)}
                 </div>
-                <Button variant="ghost" size="sm"><Download className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => downloadCsv(r.name)}><Download className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>

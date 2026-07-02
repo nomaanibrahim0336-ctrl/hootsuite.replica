@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useUiStore } from '@/lib/ui-store';
-import { currentUser } from '@/lib/mock';
+import { currentUser, messages } from '@/lib/mock';
 import { initials } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -13,6 +13,7 @@ import {
   Inbox,
   Radio,
   BarChart2,
+  Megaphone,
   Settings,
   Zap,
   HelpCircle,
@@ -20,13 +21,16 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 
+const unreadCount = messages.filter((m) => !m.isRead).length;
+
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/publisher', label: 'Publisher', icon: Send },
   { href: '/calendar', label: 'Planner', icon: CalendarDays },
-  { href: '/inbox', label: 'Inbox', icon: Inbox },
+  { href: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },
   { href: '/listening', label: 'Listening', icon: Radio },
   { href: '/analytics', label: 'Analytics', icon: BarChart2 },
+  { href: '/amplify', label: 'Amplify', icon: Megaphone },
 ];
 
 /**
@@ -41,6 +45,7 @@ function NavTab({
   collapsed,
   onClick,
   as = 'link',
+  badge,
 }: {
   href?: string;
   label: string;
@@ -49,6 +54,7 @@ function NavTab({
   collapsed: boolean;
   onClick?: () => void;
   as?: 'link' | 'button';
+  badge?: number;
 }) {
   const shell = cn(
     'block rounded-[11px] p-px transition-all duration-200',
@@ -57,16 +63,24 @@ function NavTab({
       : 'bg-white/[0.06] hover:bg-gradient-to-r hover:from-[#FFB81C]/45 hover:via-white/10 hover:to-white/10'
   );
   const inner = cn(
-    'flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium transition-colors',
+    'relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium transition-colors',
     active
       ? 'bg-gradient-to-r from-[#3A3D47] to-[#31343E] text-white'
       : 'bg-[#2B2D35] text-[#B0B8C4] hover:bg-[#33363F] hover:text-white',
     collapsed && 'justify-center px-0'
   );
+  const badgeEl = badge ? (
+    collapsed ? (
+      <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-negative" />
+    ) : (
+      <span className="ml-auto rounded-full bg-negative px-1.5 py-0.5 text-[10px] font-bold text-white">{badge}</span>
+    )
+  ) : null;
   const content = (
     <>
       <Icon className={cn('h-5 w-5 shrink-0', active && 'text-accent')} />
       {!collapsed && label}
+      {badgeEl}
     </>
   );
   if (as === 'button') {
@@ -89,16 +103,19 @@ function NavTab({
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar } = useUiStore();
+  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNav } = useUiStore();
 
   return (
     <aside
       aria-label="Main navigation"
       className={cn(
-        'fixed inset-y-0 left-0 z-30 flex flex-col transition-[width] duration-200',
+        'fixed inset-y-0 left-0 z-30 flex flex-col transition-transform duration-200 md:transition-[width]',
         'bg-gradient-to-b from-[#2F323C] via-[#2B2D35] to-[#20222A]',
-        sidebarCollapsed ? 'w-[72px]' : 'w-60'
+        // On mobile the drawer is full 60-width and slides in/out; on md+ it docks.
+        sidebarCollapsed ? 'w-60 md:w-[72px]' : 'w-60',
+        mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       )}
+      onClickCapture={() => { if (mobileNavOpen) setMobileNav(false); }}
     >
       {/* Gradient edge line on the drawer's right border */}
       <span
@@ -119,13 +136,14 @@ export function Sidebar() {
       </div>
 
       {/* Middle: core modules */}
-      <nav className="mt-1 flex-1 space-y-1.5 px-3">
-        {nav.map(({ href, label, icon }) => (
+      <nav className="mt-1 flex-1 space-y-1.5 overflow-y-auto px-3">
+        {nav.map(({ href, label, icon, badge }: any) => (
           <NavTab
             key={href}
             href={href}
             label={label}
             icon={icon}
+            badge={badge}
             active={pathname === href || pathname.startsWith(href + '/')}
             collapsed={sidebarCollapsed}
           />

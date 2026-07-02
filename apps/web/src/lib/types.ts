@@ -29,6 +29,7 @@ export interface Post {
   content: string;
   networks: NetworkType[];
   status: PostStatus;
+  approvalStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   scheduledAt?: string;
   publishedAt?: string;
   hashtags?: string[];
@@ -40,6 +41,38 @@ export interface Post {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdvocacyContent {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  shareCount: number;
+}
+
+export interface AdvocacyLeader {
+  name: string;
+  shares: number;
+  reach: number;
+}
+
+export interface ActivityItem {
+  id: string;
+  kind: 'message' | 'mention' | 'published' | 'approval';
+  network: NetworkType;
+  actor: string;
+  text: string;
+  timestamp: string;
+  sentiment?: SentimentType;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  entity: string;
+  actor: string;
+  timestamp: string;
 }
 
 export interface MessageReply {

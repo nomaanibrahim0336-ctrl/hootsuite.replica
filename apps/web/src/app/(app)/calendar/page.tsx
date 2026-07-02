@@ -2,31 +2,30 @@
 
 import { useState } from 'react';
 import {
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  format,
-  isSameMonth,
-  isSameDay,
-  addMonths,
-  subMonths,
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
+  format, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, setHours,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Card, PageHeader, Button, NetworkChip } from '@/components/ui';
-import { posts } from '@/lib/mock';
+import { posts as seedPosts } from '@/lib/mock';
+import { useUiStore } from '@/lib/ui-store';
+import { toast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
+import type { Post } from '@/lib/types';
 
 export default function CalendarPage() {
+  const openComposer = useUiStore((s) => s.openComposer);
   const [cursor, setCursor] = useState(new Date());
+  const [view, setView] = useState<'month' | 'week'>('month');
+  const [list, setList] = useState<Post[]>(seedPosts);
+  const [dragId, setDragId] = useState<string | null>(null);
 
-  const scheduled = posts.filter((p) => p.scheduledAt || p.publishedAt);
-  const monthStart = startOfMonth(cursor);
-  const days = eachDayOfInterval({
-    start: startOfWeek(monthStart),
-    end: endOfWeek(endOfMonth(cursor)),
-  });
+  const scheduled = list.filter((p) => p.scheduledAt || p.publishedAt);
+
+  const days =
+    view === 'month'
+      ? eachDayOfInterval({ start: startOfWeek(startOfMonth(cursor)), end: endOfWeek(endOfMonth(cursor)) })
+      : eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(cursor) });
 
   const postsFor = (d: Date) =>
     scheduled.filter((p) => {
@@ -34,25 +33,46 @@ export default function CalendarPage() {
       return dt && isSameDay(new Date(dt), d);
     });
 
+  const move = (day: Date) => {
+    if (!dragId) return;
+    setList((l) =>
+      l.map((p) => {
+        if (p.id !== dragId) return p;
+        const prev = p.scheduledAt ? new Date(p.scheduledAt) : setHours(day, 10);
+        const next = setHours(day, prev.getHours());
+        return { ...p, scheduledAt: next.toISOString(), status: p.status === 'published' ? p.status : 'scheduled' };
+      })
+    );
+    toast.success(`Rescheduled to ${format(day, 'MMM d')}`);
+    setDragId(null);
+  };
+
+  const step = (dir: 1 | -1) =>
+    setCursor((c) => (view === 'month' ? (dir === 1 ? addMonths(c, 1) : subMonths(c, 1)) : dir === 1 ? addWeeks(c, 1) : subWeeks(c, 1)));
+
   return (
     <div>
       <PageHeader
-        title="Content Calendar"
-        subtitle="Plan and visualize your publishing schedule."
+        title="Planner"
+        subtitle="Drag posts to reschedule. Plan your week or month at a glance."
         action={
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setCursor(subMonths(cursor, 1))}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="min-w-[9rem] text-center font-semibold text-slate-800">
-              {format(cursor, 'MMMM yyyy')}
-            </span>
-            <Button variant="secondary" size="sm" onClick={() => setCursor(addMonths(cursor, 1))}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setCursor(new Date())}>
-              Today
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-slate-200 p-0.5">
+              {(['month', 'week'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn('rounded-md px-3 py-1 text-sm font-medium capitalize', view === v ? 'bg-accent-light text-accent-deep' : 'text-slate-500')}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => step(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <span className="min-w-[9rem] text-center font-semibold text-slate-800">{format(cursor, view === 'month' ? 'MMMM yyyy' : "'Week of' MMM d")}</span>
+            <Button variant="secondary" size="sm" onClick={() => step(1)}><ChevronRight className="h-4 w-4" /></Button>
+            <Button variant="secondary" size="sm" onClick={() => setCursor(new Date())}>Today</Button>
+            <Button size="sm" onClick={openComposer}><Plus className="h-4 w-4" /> New</Button>
           </div>
         }
       />
@@ -66,33 +86,36 @@ export default function CalendarPage() {
         <div className="grid grid-cols-7">
           {days.map((day) => {
             const dayPosts = postsFor(day);
-            const inMonth = isSameMonth(day, cursor);
+            const inMonth = view === 'week' || isSameMonth(day, cursor);
             const today = isSameDay(day, new Date());
             return (
               <div
                 key={day.toISOString()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => move(day)}
                 className={cn(
-                  'min-h-[7rem] border-b border-r border-slate-100 p-1.5',
-                  !inMonth && 'bg-slate-50/60'
+                  'border-b border-r border-slate-100 p-1.5 transition-colors',
+                  view === 'month' ? 'min-h-[7rem]' : 'min-h-[16rem]',
+                  !inMonth && 'bg-slate-50/60',
+                  dragId && 'hover:bg-accent-light/40'
                 )}
               >
                 <div className="mb-1 flex justify-end">
-                  <span
-                    className={cn(
-                      'flex h-6 w-6 items-center justify-center rounded-full text-xs',
-                      today ? 'bg-accent font-semibold text-accent-ink' : inMonth ? 'text-slate-600' : 'text-slate-300'
-                    )}
-                  >
+                  <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', today ? 'bg-accent font-semibold text-accent-ink' : inMonth ? 'text-slate-600' : 'text-slate-300')}>
                     {format(day, 'd')}
                   </span>
                 </div>
                 <div className="space-y-1">
-                  {dayPosts.slice(0, 3).map((p) => (
+                  {dayPosts.slice(0, view === 'month' ? 3 : 8).map((p) => (
                     <div
                       key={p.id}
+                      draggable
+                      onDragStart={() => setDragId(p.id)}
+                      onDragEnd={() => setDragId(null)}
                       className={cn(
-                        'flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px]',
-                        p.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-accent-light text-accent-deep'
+                        'flex cursor-grab items-center gap-1 rounded-md px-1.5 py-1 text-[11px] active:cursor-grabbing',
+                        p.status === 'published' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-accent-light text-accent-deep',
+                        dragId === p.id && 'opacity-40'
                       )}
                       title={p.content}
                     >
@@ -100,8 +123,8 @@ export default function CalendarPage() {
                       <span className="truncate">{p.content}</span>
                     </div>
                   ))}
-                  {dayPosts.length > 3 && (
-                    <p className="px-1 text-[10px] text-slate-400">+{dayPosts.length - 3} more</p>
+                  {dayPosts.length > (view === 'month' ? 3 : 8) && (
+                    <p className="px-1 text-[10px] text-slate-400">+{dayPosts.length - (view === 'month' ? 3 : 8)} more</p>
                   )}
                 </div>
               </div>

@@ -13,6 +13,10 @@ import type {
   TeamMember,
   User,
   NetworkType,
+  AdvocacyContent,
+  AdvocacyLeader,
+  ActivityItem,
+  AuditEntry,
 } from './types';
 
 export const currentUser: User = {
@@ -182,4 +186,56 @@ export const team: TeamMember[] = [
   { id: 't3', name: 'David Okafor', email: 'david@socialhub.app', role: 'editor', joinedAt: '2025-03-11' },
   { id: 't4', name: 'Priya Nair', email: 'priya@socialhub.app', role: 'editor', joinedAt: '2025-04-02' },
   { id: 't5', name: 'Marco Rossi', email: 'marco@socialhub.app', role: 'viewer', joinedAt: '2025-05-18' },
+];
+
+// Approval status on a few posts (drives the approvals queue + chips).
+posts.forEach((p) => {
+  if (!p.approvalStatus) p.approvalStatus = 'none';
+});
+posts[8] && (posts[8].approvalStatus = 'pending'); // the draft
+if (posts[0]) posts[0].approvalStatus = 'approved';
+export const pendingApprovals = () => posts.filter((p) => p.approvalStatus === 'pending');
+
+export const advocacyContent: AdvocacyContent[] = [
+  { id: 'ac1', title: 'Product launch announcement', body: '🚀 SocialHub AI is here! Create scroll-stopping content in seconds. Share the news with your network.', category: 'Launch', shareCount: 42 },
+  { id: 'ac2', title: 'We are hiring!', body: 'Join our team — we are looking for engineers, designers and marketers. Check open roles at socialhub.app/careers 🌱', category: 'Recruiting', shareCount: 18 },
+  { id: 'ac3', title: 'Customer success story', body: 'See how @brightlabs grew 3x with SocialHub. Real results, real growth. 📈', category: 'Social Proof', shareCount: 27 },
+  { id: 'ac4', title: 'Industry report 2026', body: 'Our State of Social 2026 report is live — 40+ pages of trends and benchmarks. Download free.', category: 'Content', shareCount: 63 },
+];
+
+export const advocacyLeaderboard: AdvocacyLeader[] = [
+  { name: 'Priya Nair', shares: 34, reach: 128400 },
+  { name: 'Sarah Lee', shares: 29, reach: 96200 },
+  { name: 'David Okafor', shares: 21, reach: 71800 },
+  { name: 'Marco Rossi', shares: 12, reach: 38900 },
+];
+
+export const advocacyStats = { totalShares: 96, totalReach: 335300, activeAdvocates: 12 };
+
+export const activityStream: ActivityItem[] = [
+  { id: 'a1', kind: 'message', network: 'facebook', actor: 'Emma Watson', text: 'Love this product! When is the Android app coming out?', timestamp: new Date(now - 0.4 * 3600000).toISOString(), sentiment: 'positive' },
+  { id: 'a2', kind: 'mention', network: 'twitter', actor: 'Ava Patel', text: 'Just switched to @socialhub and my workflow is 10x better!', timestamp: new Date(now - 1.1 * 3600000).toISOString(), sentiment: 'positive' },
+  { id: 'a3', kind: 'published', network: 'instagram', actor: 'You', text: 'New feature drop: Unified Inbox now supports TikTok comments! 🎉', timestamp: new Date(now - 2 * 3600000).toISOString() },
+  { id: 'a4', kind: 'message', network: 'twitter', actor: 'James Carter', text: 'I was charged twice this month, can you help?', timestamp: new Date(now - 3 * 3600000).toISOString(), sentiment: 'negative' },
+  { id: 'a5', kind: 'approval', network: 'linkedin', actor: 'Sarah Lee', text: 'approved “Q3 product roadmap teaser”', timestamp: new Date(now - 4.5 * 3600000).toISOString() },
+  { id: 'a6', kind: 'mention', network: 'facebook', actor: 'Sofia Reyes', text: 'Not happy with the pricing changes at socialhub tbh', timestamp: new Date(now - 6 * 3600000).toISOString(), sentiment: 'negative' },
+];
+
+export const brandHealth = { score: 82, delta: 3.4, positive: 68, neutral: 22, negative: 10 };
+
+// Best-time-to-post heuristic (engagement index 0-100 per weekday hour bucket).
+export const bestTimes = [
+  { day: 'Mon', hour: '9 AM', score: 74 },
+  { day: 'Tue', hour: '10 AM', score: 91 },
+  { day: 'Wed', hour: '12 PM', score: 83 },
+  { day: 'Thu', hour: '5 PM', score: 79 },
+  { day: 'Fri', hour: '11 AM', score: 88 },
+];
+
+export const auditLog: AuditEntry[] = [
+  { id: 'au1', action: 'post.approve', entity: 'Q3 product roadmap teaser', actor: 'Sarah Lee', timestamp: new Date(now - 4.5 * 3600000).toISOString() },
+  { id: 'au2', action: 'post.publish', entity: 'New feature drop', actor: 'Nomaan Ibrahim', timestamp: new Date(now - 2 * 3600000).toISOString() },
+  { id: 'au3', action: 'team.invite', entity: 'marco@socialhub.app', actor: 'Nomaan Ibrahim', timestamp: new Date(now - 26 * 3600000).toISOString() },
+  { id: 'au4', action: 'advocacy.share', entity: 'Product launch announcement', actor: 'Priya Nair', timestamp: new Date(now - 30 * 3600000).toISOString() },
+  { id: 'au5', action: 'network.connect', entity: 'Instagram', actor: 'Nomaan Ibrahim', timestamp: new Date(now - 72 * 3600000).toISOString() },
 ];
