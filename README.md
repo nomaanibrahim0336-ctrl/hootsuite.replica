@@ -38,6 +38,12 @@ Built as a monorepo with npm workspaces.
   JSON stored as text — so no app-code changes). The web app reads the Supabase URL + anon
   key from `NEXT_PUBLIC_SUPABASE_*` (see `apps/web/.env.example`).
 
+- **Plain-SQL alternative**: `supabase/migrations/0001_init.sql` (schema, indexes, FKs, RLS)
+  and `0002_seed.sql` (demo data) are paste-ready for the Supabase SQL Editor — no Prisma or
+  Node required. Both were **verified end-to-end against a real Postgres 17 instance**: all
+  14 tables/11 indexes/5 FKs created, seed row counts match `prisma/seed.ts` exactly, and
+  both files are idempotent (safe to re-run). See `supabase/README.md`.
+
 ## Phase 1 — Frontend (complete)
 
 A fully navigable dashboard driven by realistic mock data. No backend required to explore it.

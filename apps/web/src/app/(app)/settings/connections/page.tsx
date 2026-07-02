@@ -87,7 +87,9 @@ export default function ConnectionsPage() {
               The API defaults to local SQLite. To use Supabase, set <code>DATABASE_URL</code> in
               <code> apps/api/.env</code> to the project&apos;s connection string, then run
               <code> npm run db:push:supabase &amp;&amp; npm run db:seed</code>. Schema:
-              <code> prisma/schema.postgres.prisma</code>.
+              <code> prisma/schema.postgres.prisma</code>. Prefer plain SQL? Paste-ready,
+              verified migrations live in <code>supabase/migrations/</code> — run them
+              directly in the Supabase SQL Editor (see <code>supabase/README.md</code>).
             </p>
           </div>
         </Card>
