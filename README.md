@@ -95,6 +95,27 @@ Disable with `SCHEDULER_ENABLED=false`.
 - **Report export**: `/analytics/reports/:id/export?format=csv|pdf` streams a real CSV or a
   generated PDF (via pdfkit) built from live data.
 
+## Phase 5 — Real AI (multi-provider, complete)
+
+A pluggable LLM layer (`apps/api/src/llm/`) with a common `LLMProvider` interface and
+swappable adapters for **Claude, OpenAI, Gemini, DeepSeek**, a **Custom** OpenAI-compatible
+endpoint, and a built-in **offline mock**.
+
+- **Keys live in env only** (`apps/api/.env`) — never in the DB or browser. A provider
+  becomes selectable the moment its key is present; otherwise the layer **transparently
+  falls back to the offline generator**, so everything works today with zero keys.
+- **Active provider/model** persist in an `AppSetting` DB row, switchable at runtime.
+- Wired: `POST /api/ai/caption`, `/hashtags`, `/ideas`, `/sentiment` all route through the
+  active provider. Management: `GET /api/ai/status`, `GET /api/ai/providers`,
+  `PUT /api/ai/config` (requires MANAGE_SETTINGS).
+- **Frontend**: a "AI & Automation" panel in Settings lists providers with a configured
+  badge, and lets you pick the active provider + model (keys stay server-side).
+
+Add a provider later by setting its key in `apps/api/.env` (see `.env.example`):
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY`, or
+`CUSTOM_LLM_BASE_URL` + `CUSTOM_LLM_API_KEY` + `CUSTOM_LLM_MODEL`. Optionally pin the default
+with `LLM_PROVIDER` / `LLM_MODEL`.
+
 ## Phase 7 — Collaboration + Employee Advocacy (complete)
 
 - **RBAC** (`src/rbac.ts`): owner/admin/editor/viewer roles → permission sets, enforced by

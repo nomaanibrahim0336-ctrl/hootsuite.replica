@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   VIEW_ANALYTICS: 'view_analytics',
   MANAGE_TEAM: 'manage_team',
   MANAGE_ADVOCACY: 'manage_advocacy',
+  MANAGE_SETTINGS: 'manage_settings',
   VIEW_AUDIT: 'view_audit',
 } as const;
 

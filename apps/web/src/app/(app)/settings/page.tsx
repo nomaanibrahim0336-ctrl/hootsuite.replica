@@ -7,6 +7,7 @@ import { NETWORK_META, formatNumber } from '@/lib/utils';
 import type { Network, UserRole } from '@/lib/types';
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
+import { AiSettingsPanel } from '@/components/AiSettingsPanel';
 
 const roleColor: Record<UserRole, string> = {
   owner: 'purple',
@@ -77,6 +78,9 @@ export default function SettingsPage() {
             ))}
           </div>
         </Card>
+
+        {/* AI providers */}
+        <AiSettingsPanel />
 
         {/* Team */}
         <Card>

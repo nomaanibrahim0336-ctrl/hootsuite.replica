@@ -157,6 +157,11 @@ model Report {
   ownerId String?
 }
 
+model AppSetting {
+  key   String @id
+  value String
+}
+
 model TeamMember {
   id       String   @id @default(uuid())
   name     String

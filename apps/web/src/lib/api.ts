@@ -15,6 +15,14 @@ export function clearToken() {
   if (typeof window !== 'undefined') localStorage.removeItem(TOKEN_KEY);
 }
 
+export interface AiProvider {
+  id: string;
+  label: string;
+  models: string[];
+  configured: boolean;
+  envKey?: string;
+}
+
 interface ApiResult<T> {
   success: boolean;
   data: T;
@@ -87,11 +95,22 @@ export const api = {
 
   // AI
   aiCaption: (prompt: string, tone: string) =>
-    request<{ caption: string }>('/ai/caption', { method: 'POST', body: JSON.stringify({ prompt, tone }) }),
+    request<{ caption: string; provider: string; fallback: boolean }>('/ai/caption', { method: 'POST', body: JSON.stringify({ prompt, tone }) }),
   aiHashtags: (topic: string, count = 8) =>
     request<{ hashtags: string[] }>('/ai/hashtags', { method: 'POST', body: JSON.stringify({ topic, count }) }),
   aiIdeas: (industry: string, count = 5) =>
     request<{ ideas: string[] }>('/ai/ideas', { method: 'POST', body: JSON.stringify({ industry, count }) }),
+  aiSentiment: (text: string) =>
+    request<{ sentiment: string }>('/ai/sentiment', { method: 'POST', body: JSON.stringify({ text }) }),
+
+  // AI provider config
+  aiStatus: () =>
+    request<{ active: string; model: string; usingMock: boolean; providers: AiProvider[] }>('/ai/status'),
+  aiSetConfig: (provider: string, model?: string) =>
+    request<{ active: string; model: string; usingMock: boolean; providers: AiProvider[] }>('/ai/config', {
+      method: 'PUT',
+      body: JSON.stringify({ provider, model }),
+    }),
 
   // Teams
   getTeam: () => request<any[]>('/teams'),
