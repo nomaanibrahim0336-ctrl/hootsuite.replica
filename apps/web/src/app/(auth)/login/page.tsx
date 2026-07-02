@@ -27,10 +27,10 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-sidebar p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-surface p-8 shadow-xl">
         <div className="mb-6 flex items-center gap-2">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-            <Zap className="h-5 w-5 text-white" />
+            <Zap className="h-5 w-5 text-accent-ink" />
           </span>
           <span className="text-xl font-bold text-slate-900">SocialHub</span>
         </div>
@@ -56,14 +56,14 @@ export default function LoginPage() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-accent"
             />
           </div>
-          <button type="submit" disabled={loading} className="w-full rounded-lg bg-accent py-2.5 font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+          <button type="submit" disabled={loading} className="w-full rounded-lg bg-accent py-2.5 font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-60">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="font-medium text-accent hover:underline">
+          <Link href="/register" className="font-medium text-accent-deep hover:underline">
             Sign up
           </Link>
         </p>

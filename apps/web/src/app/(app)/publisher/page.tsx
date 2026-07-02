@@ -79,7 +79,7 @@ export default function PublisherPage() {
                       onClick={() => toggle(n.type)}
                       className={cn(
                         'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                        active ? 'border-accent bg-accent-light text-accent' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        active ? 'border-accent bg-accent-light text-accent-deep' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                       )}
                     >
                       <NetworkChip type={n.type} size={20} />
@@ -101,7 +101,7 @@ export default function PublisherPage() {
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex gap-2">
                   <Button variant="secondary" size="sm" onClick={aiCaption}>
-                    <Sparkles className="h-4 w-4 text-accent" /> AI Caption
+                    <Sparkles className="h-4 w-4 text-accent-deep" /> AI Caption
                   </Button>
                   <Button variant="secondary" size="sm">
                     <ImageIcon className="h-4 w-4" /> Media
@@ -172,7 +172,7 @@ export default function PublisherPage() {
                   onClick={() => setFilter(f)}
                   className={cn(
                     'rounded-md px-3 py-1 text-sm font-medium capitalize',
-                    filter === f ? 'bg-accent-light text-accent' : 'text-slate-500 hover:bg-slate-100'
+                    filter === f ? 'bg-accent-light text-accent-deep' : 'text-slate-500 hover:bg-slate-100'
                   )}
                 >
                   {f}

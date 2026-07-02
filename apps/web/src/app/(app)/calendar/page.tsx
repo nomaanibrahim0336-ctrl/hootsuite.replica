@@ -80,7 +80,7 @@ export default function CalendarPage() {
                   <span
                     className={cn(
                       'flex h-6 w-6 items-center justify-center rounded-full text-xs',
-                      today ? 'bg-accent font-semibold text-white' : inMonth ? 'text-slate-600' : 'text-slate-300'
+                      today ? 'bg-accent font-semibold text-accent-ink' : inMonth ? 'text-slate-600' : 'text-slate-300'
                     )}
                   >
                     {format(day, 'd')}
@@ -92,7 +92,7 @@ export default function CalendarPage() {
                       key={p.id}
                       className={cn(
                         'flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px]',
-                        p.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-accent-light text-accent'
+                        p.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-accent-light text-accent-deep'
                       )}
                       title={p.content}
                     >

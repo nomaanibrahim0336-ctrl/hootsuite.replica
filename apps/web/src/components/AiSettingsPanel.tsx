@@ -57,7 +57,7 @@ export function AiSettingsPanel() {
       <CardHeader
         title="AI & Automation"
         subtitle="Choose the LLM provider that powers captions, hashtags, ideas and sentiment."
-        action={<Sparkles className="h-5 w-5 text-accent" />}
+        action={<Sparkles className="h-5 w-5 text-accent-deep" />}
       />
       <div className="p-5">
         {!online && (

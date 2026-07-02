@@ -98,7 +98,7 @@ export default function ListeningPage() {
                 onClick={() => setActive(s.id)}
                 className={cn('flex w-full items-start gap-3 px-5 py-3 text-left', active === s.id ? 'bg-accent-light/50' : 'hover:bg-slate-50')}
               >
-                <Radio className={cn('mt-0.5 h-4 w-4', s.isActive ? 'text-accent' : 'text-slate-300')} />
+                <Radio className={cn('mt-0.5 h-4 w-4', s.isActive ? 'text-accent-deep' : 'text-slate-300')} />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-slate-800">{s.name}</p>
@@ -118,7 +118,7 @@ export default function ListeningPage() {
           <div className="h-72 p-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sentimentTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f6" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={2} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
                 <Tooltip />

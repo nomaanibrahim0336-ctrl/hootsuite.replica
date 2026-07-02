@@ -47,7 +47,7 @@ export default function AnalyticsPage() {
           <div className="h-80 p-4">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analyticsTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f6" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={5} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
                 <Tooltip />
@@ -92,7 +92,7 @@ export default function AnalyticsPage() {
             {reports.map((r) => (
               <div key={r.id} className="flex items-center gap-3 px-5 py-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-light">
-                  <FileText className="h-4 w-4 text-accent" />
+                  <FileText className="h-4 w-4 text-accent-deep" />
                 </span>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-slate-800">{r.name}</p>

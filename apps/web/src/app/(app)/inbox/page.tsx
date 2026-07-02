@@ -50,7 +50,7 @@ export default function InboxPage() {
                 onClick={() => setFilter(f)}
                 className={cn(
                   'flex-1 rounded-md px-2 py-1.5 text-sm font-medium capitalize',
-                  filter === f ? 'bg-accent-light text-accent' : 'text-slate-500 hover:bg-slate-100'
+                  filter === f ? 'bg-accent-light text-accent-deep' : 'text-slate-500 hover:bg-slate-100'
                 )}
               >
                 {f}
@@ -121,7 +121,7 @@ export default function InboxPage() {
                     key={r.id}
                     className={cn(
                       'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm',
-                      r.isFromUs ? 'ml-auto rounded-tr-sm bg-accent text-white' : 'rounded-tl-sm bg-slate-100 text-slate-700'
+                      r.isFromUs ? 'ml-auto rounded-tr-sm bg-accent text-accent-ink' : 'rounded-tl-sm bg-slate-100 text-slate-700'
                     )}
                   >
                     {r.content}
@@ -136,7 +136,7 @@ export default function InboxPage() {
                     <button
                       key={sr.id}
                       onClick={() => setReply(sr.content)}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent"
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent-deep"
                     >
                       {sr.title}
                     </button>

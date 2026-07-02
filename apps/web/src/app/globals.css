@@ -2,12 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Design tokens (RGB triplets so Tailwind opacity modifiers work).
+   Light mode is the default; `.dark` on <html> flips the neutral scale.
+--------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
+
+  --canvas: 248 249 250;   /* #F8F9FA */
+  --surface: 255 255 255;  /* #FFFFFF */
+  --accent-light: 255 244 219;
+  --accent-deep: 148 106 0; /* readable saffron for text on light surfaces */
+
+  /* Neutral scale (slate) — light mode */
+  --s50: 248 250 252;
+  --s100: 241 245 249;
+  --s200: 226 232 240;
+  --s300: 203 213 225;
+  --s400: 148 163 184;
+  --s500: 100 116 139;
+  --s600: 71 85 105;
+  --s700: 51 65 85;
+  --s800: 30 32 36;        /* #1E2024 primary text */
+  --s900: 16 20 26;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --canvas: 26 29 35;      /* #1A1D23 */
+  --surface: 36 40 48;     /* #242830 */
+  --accent-light: 64 52 20;
+  --accent-deep: 255 200 82; /* brighter saffron for text on dark surfaces */
+
+  /* Neutral scale — inverted for dark mode */
+  --s50: 32 36 44;
+  --s100: 44 49 58;
+  --s200: 58 63 74;
+  --s300: 88 96 110;
+  --s400: 128 138 154;
+  --s500: 152 162 178;
+  --s600: 176 184 196;     /* #B0B8C4 */
+  --s700: 200 208 220;
+  --s800: 232 237 242;     /* #E8EDF2 primary text */
+  --s900: 245 248 252;
 }
 
 body {
-  @apply bg-canvas text-slate-800 antialiased;
+  @apply bg-canvas font-sans text-slate-800 antialiased;
+}
+
+/* Accessible, visible focus indicator on every interactive element. */
+:focus-visible {
+  outline: 2px solid #ffb81c;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Loading skeleton shimmer. */
+.skeleton {
+  @apply animate-shimmer rounded-md bg-slate-100;
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--s100)) 0px,
+    rgb(var(--s200)) 40px,
+    rgb(var(--s100)) 80px
+  );
+  background-size: 400px 100%;
 }
 
 /* Custom scrollbar */
@@ -16,8 +77,20 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full;
+  @apply rounded-full bg-slate-300;
 }
 ::-webkit-scrollbar-track {
   @apply bg-transparent;
+}
+
+/* Respect prefers-reduced-motion: collapse animations & transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
