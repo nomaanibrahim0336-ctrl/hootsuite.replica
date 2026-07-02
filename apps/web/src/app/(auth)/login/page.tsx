@@ -4,15 +4,25 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Zap } from 'lucide-react';
+import { api, setToken } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('nomaan.ibrahim0336@gmail.com');
   const [password, setPassword] = useState('demo1234');
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/dashboard');
+    setLoading(true);
+    try {
+      const res = await api.login(email, password);
+      setToken(res.accessToken);
+    } catch {
+      // API unavailable — proceed in demo mode.
+    } finally {
+      router.push('/dashboard');
+    }
   };
 
   return (
@@ -46,8 +56,8 @@ export default function LoginPage() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-accent"
             />
           </div>
-          <button type="submit" className="w-full rounded-lg bg-accent py-2.5 font-medium text-white hover:bg-accent-hover">
-            Sign in
+          <button type="submit" disabled={loading} className="w-full rounded-lg bg-accent py-2.5 font-medium text-white hover:bg-accent-hover disabled:opacity-60">
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 

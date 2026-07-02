@@ -38,14 +38,39 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-## Phase 2 — Backend (next)
+## Phase 2 — Backend (complete)
 
-Express.js REST API under `apps/api` with JWT auth, rate limiting and mock data endpoints
-mirroring the frontend. See `apps/api/.env.example`.
+Express.js + TypeScript REST API under `apps/api` with JWT auth, Helmet, CORS,
+rate limiting (100 req/min) and an in-memory mock data store. All routes return
+`{ success, data }` envelopes.
 
 ```bash
-npm run dev:api      # http://localhost:3001
+cp apps/api/.env.example apps/api/.env
+npm run dev:api      # http://localhost:3001  (GET /health to verify)
 ```
+
+### Endpoints
+
+| Group | Routes |
+|-------|--------|
+| Auth (public) | `POST /api/auth/register` · `login` · `refresh` · `logout` |
+| Networks | `GET /api/networks` · `POST /` · `DELETE /:id` · `GET /:id/status` |
+| Posts | `GET /api/posts` · `POST /` · `GET/PUT/DELETE /:id` · `POST /:id/schedule` · `/:id/publish` · `GET /calendar` · `POST /bulk` |
+| Inbox | `GET /api/inbox` · `PUT /:id/read` · `POST /:id/reply` · `PUT /:id/assign` · `GET/POST /saved-replies` |
+| Listening | `GET/POST /api/listening/streams` · `GET /mentions` · `GET /sentiment` |
+| Analytics | `GET /api/analytics/metrics` · `GET/POST /reports` · `GET/PUT/DELETE /reports/:id` · `POST /reports/:id/export` |
+| AI | `POST /api/ai/caption` · `/hashtags` · `/ideas` |
+| Teams | `GET /api/teams` · `GET/POST/PUT/DELETE /teams/members[/:id]` |
+
+All routes except `/api/auth/*` and `/health` require a `Bearer <token>` header.
+
+### Frontend ↔ backend wiring
+
+`apps/web/src/lib/api.ts` is a fully typed client for every endpoint above, with
+token storage. The login/register screens call the live API and store the JWT
+(falling back to demo mode if the API is offline). Data pages ship with local
+mock data for offline reliability and can be swapped to `api.*` calls directly.
+Point the web app at the API via `NEXT_PUBLIC_API_URL` (see `apps/web/.env.example`).
 
 ## Infrastructure
 
