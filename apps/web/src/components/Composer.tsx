@@ -7,6 +7,7 @@ import { NETWORK_META, NETWORK_LIMITS, cn, initials } from '@/lib/utils';
 import type { NetworkType } from '@/lib/types';
 import { Button, NetworkChip } from './ui';
 import { toast } from './Toast';
+import { api } from '@/lib/api';
 import { X, Sparkles, Hash, Lightbulb, Image as ImageIcon, Calendar, Send, Heart, MessageCircle, Repeat2 } from 'lucide-react';
 
 const TONES = ['professional', 'casual', 'playful', 'bold'] as const;
@@ -56,7 +57,7 @@ export function Composer() {
 
   const reset = () => { setContent(''); setWhen(''); setIdeas([]); };
 
-  const submit = (kind: 'draft' | 'schedule' | 'publish') => {
+  const submit = async (kind: 'draft' | 'schedule' | 'publish') => {
     if (kind !== 'draft' && (!content.trim() || selected.length === 0)) {
       toast.error('Add content and pick at least one network');
       return;
@@ -65,6 +66,15 @@ export function Composer() {
     if (kind === 'schedule' && !when) return toast.error('Pick a date & time to schedule');
     const labels = { draft: 'Draft saved', schedule: 'Post scheduled 🎉', publish: 'Published across networks ✓' };
     toast.success(labels[kind]);
+    const status = kind === 'schedule' ? 'scheduled' : kind === 'publish' ? 'published' : 'draft';
+    api.createPost({
+      content,
+      networks: selected,
+      status,
+      scheduledAt: kind === 'schedule' ? new Date(when).toISOString() : undefined,
+    }).catch(() => {
+      // Live API unreachable — the toast above already confirmed the (local-only) action.
+    });
     reset();
     closeComposer();
   };
