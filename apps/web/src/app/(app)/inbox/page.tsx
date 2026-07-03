@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, PageHeader, Badge, NetworkChip, Avatar, Button } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/Toast';
-import { messages as seed, savedReplies } from '@/lib/mock';
+import { messages as seed, savedReplies as seedSavedReplies } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Message, MessageStatus } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -14,10 +15,27 @@ const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolv
 
 export default function InboxPage() {
   const [list, setList] = useState<Message[]>(seed);
+  const [savedReplies, setSavedReplies] = useState(seedSavedReplies);
   const [filter, setFilter] = useState<(typeof filters)[number]>('all');
   const [activeId, setActiveId] = useState(seed[0].id);
   const [reply, setReply] = useState('');
   const [note, setNote] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [messagesRes, repliesRes] = await Promise.all([api.getInbox(), api.getSavedReplies()]);
+        if (cancelled) return;
+        if (messagesRes?.length) { setList(messagesRes); setActiveId(messagesRes[0].id); }
+        if (repliesRes?.length) setSavedReplies(repliesRes);
+      } catch {
+        // Live API unreachable — keep mock data so the inbox still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = filter === 'all' ? list : list.filter((m) => m.status === filter);
   const active = list.find((m) => m.id === activeId) ?? filtered[0];
@@ -27,17 +45,26 @@ export default function InboxPage() {
 
   const select = (m: Message) => {
     setActiveId(m.id);
-    if (!m.isRead) update(m.id, { isRead: true });
+    if (!m.isRead) {
+      update(m.id, { isRead: true });
+      api.markMessageRead(m.id).catch(() => {
+        // API unreachable — local read state stands as the offline result.
+      });
+    }
   };
 
   const sendReply = () => {
     if (!reply.trim() || !active) return;
+    const content = reply;
     update(active.id, {
       status: 'resolved',
-      thread: [...active.thread, { id: 'r' + Date.now(), content: reply, isFromUs: true, timestamp: new Date().toISOString() }],
+      thread: [...active.thread, { id: 'r' + Date.now(), content, isFromUs: true, timestamp: new Date().toISOString() }],
     });
     setReply('');
     toast.success('Reply sent');
+    api.replyMessage(active.id, content).catch(() => {
+      // API unreachable — local reply stands as the offline result.
+    });
   };
 
   return (
@@ -117,7 +144,7 @@ export default function InboxPage() {
               </div>
 
               <div className="flex items-center gap-2 border-t border-slate-100 p-3">
-                <Button variant="ghost" size="sm" onClick={() => { update(active.id, { status: 'assigned', assignedTo: 'Sarah Lee' }); toast.info('Assigned to Sarah Lee'); }}>
+                <Button variant="ghost" size="sm" onClick={() => { update(active.id, { status: 'assigned', assignedTo: 'Sarah Lee' }); toast.info('Assigned to Sarah Lee'); api.assignMessage(active.id, 'Sarah Lee').catch(() => {}); }}>
                   <UserPlus className="h-4 w-4" /> <span className="hidden sm:inline">Assign</span>
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => { update(active.id, { status: 'resolved' }); toast.success('Marked resolved'); }}>

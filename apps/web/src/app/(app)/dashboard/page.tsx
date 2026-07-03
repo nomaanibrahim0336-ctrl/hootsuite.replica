@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, Clock, Activity, Gauge, Sparkles } from 'lucide-react';
 import { Card, CardHeader, PageHeader, NetworkChip, Badge, Avatar } from '@/components/ui';
-import { dashboardMetrics, analyticsTrend, posts, networks, activityStream, brandHealth, bestTimes } from '@/lib/mock';
+import { dashboardMetrics as mockMetrics, analyticsTrend as mockTrend, posts as mockPosts, networks as mockNetworks, activityStream, brandHealth, bestTimes } from '@/lib/mock';
+import { api } from '@/lib/api';
+import { toast } from '@/components/Toast';
 import { formatNumber, cn, NETWORK_META, SENTIMENT_META } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -13,6 +15,36 @@ const kindLabel: Record<string, string> = { message: 'New message', mention: 'Me
 
 export default function DashboardPage() {
   const [range, setRange] = useState<(typeof RANGES)[number]>('30 days');
+  const [loading, setLoading] = useState(true);
+  const [dashboardMetrics, setDashboardMetrics] = useState(mockMetrics);
+  const [analyticsTrend, setAnalyticsTrend] = useState(mockTrend);
+  const [posts, setPosts] = useState(mockPosts);
+  const [networks, setNetworks] = useState(mockNetworks);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [metricsRes, postsRes, networksRes] = await Promise.all([
+          api.getMetrics(),
+          api.getPosts(),
+          api.getNetworks(),
+        ]);
+        if (cancelled) return;
+        if (metricsRes?.metrics?.length) setDashboardMetrics(metricsRes.metrics);
+        if (metricsRes?.trend?.length) setAnalyticsTrend(metricsRes.trend);
+        if (postsRes?.length) setPosts(postsRes);
+        if (networksRes?.length) setNetworks(networksRes);
+      } catch {
+        // Live API unreachable — keep mock data so the dashboard still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const upcoming = posts.filter((p) => p.status === 'scheduled').slice(0, 5);
   const recent = posts.filter((p) => p.status === 'published').slice(0, 3);
   const days = range === '7 days' ? 7 : range === '90 days' ? 90 : 30;
@@ -32,7 +64,7 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', loading && 'opacity-60')}>
         {dashboardMetrics.map((m) => (
           <Card key={m.label} className="p-5">
             <p className="text-sm text-slate-500">{m.label}</p>

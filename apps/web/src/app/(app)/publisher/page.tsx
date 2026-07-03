@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toast } from '@/components/Toast';
 import { posts as seedPosts } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { useUiStore } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import type { Post, PostStatus } from '@/lib/types';
@@ -26,19 +27,44 @@ export default function PublisherPage() {
   const [filter, setFilter] = useState<'all' | PostStatus>('all');
   const [toDelete, setToDelete] = useState<Post | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getPosts();
+        if (!cancelled && res?.length) setList(res);
+      } catch {
+        // Live API unreachable — keep mock data so the page still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const pending = list.filter((p) => p.approvalStatus === 'pending');
   const filtered = filter === 'all' ? list : list.filter((p) => p.status === filter);
 
-  const setApproval = (id: string, approvalStatus: Post['approvalStatus']) => {
+  const setApproval = async (id: string, approvalStatus: Post['approvalStatus']) => {
     setList((l) => l.map((p) => (p.id === id ? { ...p, approvalStatus } : p)));
     toast.success(approvalStatus === 'approved' ? 'Post approved ✓' : 'Post rejected');
+    try {
+      await (approvalStatus === 'approved' ? api.approvePost(id) : api.rejectPost(id));
+    } catch {
+      // API unreachable — local state change stands as the offline result.
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!toDelete) return;
-    setList((l) => l.filter((p) => p.id !== toDelete.id));
+    const id = toDelete.id;
+    setList((l) => l.filter((p) => p.id !== id));
     toast.success('Post deleted');
     setToDelete(null);
+    try {
+      await api.deletePost(id);
+    } catch {
+      // API unreachable — local removal stands as the offline result.
+    }
   };
 
   return (

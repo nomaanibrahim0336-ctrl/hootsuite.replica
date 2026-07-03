@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   format, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, setHours,
@@ -8,6 +8,7 @@ import {
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Card, PageHeader, Button, NetworkChip } from '@/components/ui';
 import { posts as seedPosts } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { useUiStore } from '@/lib/ui-store';
 import { toast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,20 @@ export default function CalendarPage() {
   const [view, setView] = useState<'month' | 'week'>('month');
   const [list, setList] = useState<Post[]>(seedPosts);
   const [dragId, setDragId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getPosts();
+        if (!cancelled && res?.length) setList(res);
+      } catch {
+        // Live API unreachable — keep mock data so the planner still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const scheduled = list.filter((p) => p.scheduledAt || p.publishedAt);
 
@@ -35,16 +50,24 @@ export default function CalendarPage() {
 
   const move = (day: Date) => {
     if (!dragId) return;
+    const id = dragId;
+    let nextIso = '';
     setList((l) =>
       l.map((p) => {
-        if (p.id !== dragId) return p;
+        if (p.id !== id) return p;
         const prev = p.scheduledAt ? new Date(p.scheduledAt) : setHours(day, 10);
         const next = setHours(day, prev.getHours());
-        return { ...p, scheduledAt: next.toISOString(), status: p.status === 'published' ? p.status : 'scheduled' };
+        nextIso = next.toISOString();
+        return { ...p, scheduledAt: nextIso, status: p.status === 'published' ? p.status : 'scheduled' };
       })
     );
     toast.success(`Rescheduled to ${format(day, 'MMM d')}`);
     setDragId(null);
+    if (nextIso) {
+      api.schedulePost(id, nextIso).catch(() => {
+        // API unreachable — local reschedule stands as the offline result.
+      });
+    }
   };
 
   const step = (dir: 1 | -1) =>

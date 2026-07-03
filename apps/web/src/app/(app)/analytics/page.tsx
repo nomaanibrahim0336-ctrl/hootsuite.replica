@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -15,14 +16,15 @@ import {
 } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, FileText, Download } from 'lucide-react';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/components/ui';
-import { analyticsMetrics, analyticsTrend, networkBreakdown, reports, reportTemplates } from '@/lib/mock';
+import { analyticsMetrics as seedMetrics, analyticsTrend as seedTrend, networkBreakdown as seedBreakdown, reports as seedReports, reportTemplates } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { formatNumber, cn, NETWORK_META } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from '@/components/Toast';
 
-function downloadCsv(name: string) {
+function downloadCsv(name: string, metrics: typeof seedMetrics) {
   const header = 'Metric,Value,Change\n';
-  const rows = analyticsMetrics.map((m) => `${m.label},${m.value},${m.change}%`).join('\n');
+  const rows = metrics.map((m) => `${m.label},${m.value},${m.change}%`).join('\n');
   const blob = new Blob([`Report,${name}\n\n${header}${rows}\n`], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -34,12 +36,44 @@ function downloadCsv(name: string) {
 }
 
 export default function AnalyticsPage() {
+  const [analyticsMetrics, setAnalyticsMetrics] = useState(seedMetrics);
+  const [analyticsTrend, setAnalyticsTrend] = useState(seedTrend);
+  const [networkBreakdown, setNetworkBreakdown] = useState(seedBreakdown);
+  const [reports, setReports] = useState(seedReports);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [metricsRes, reportsRes] = await Promise.all([api.getMetrics(), api.getReports()]);
+        if (cancelled) return;
+        if (metricsRes?.metrics?.length) setAnalyticsMetrics(metricsRes.metrics);
+        if (metricsRes?.trend?.length) setAnalyticsTrend(metricsRes.trend);
+        if (metricsRes?.networkBreakdown?.length) setNetworkBreakdown(metricsRes.networkBreakdown);
+        if (reportsRes?.length) setReports(reportsRes);
+      } catch {
+        // Live API unreachable — keep mock data so the page still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const exportReport = async (id: string, name: string) => {
+    try {
+      await api.exportReport(id, 'csv');
+    } catch {
+      // API unreachable — fall back to a client-generated CSV.
+    }
+    downloadCsv(name, analyticsMetrics);
+  };
+
   return (
     <div>
       <PageHeader
         title="Analytics & Reporting"
         subtitle="Measure performance and prove ROI across every network."
-        action={<Button variant="secondary" onClick={() => downloadCsv('Analytics Overview')}><Download className="h-4 w-4" /> Export</Button>}
+        action={<Button variant="secondary" onClick={() => downloadCsv('Analytics Overview', analyticsMetrics)}><Download className="h-4 w-4" /> Export</Button>}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -115,7 +149,7 @@ export default function AnalyticsPage() {
                 <div className="flex -space-x-1.5">
                   {r.networks.map((n) => <NetworkChip key={n} type={n} size={20} />)}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => downloadCsv(r.name)}><Download className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportReport(r.id, r.name)}><Download className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>

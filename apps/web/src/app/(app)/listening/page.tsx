@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -12,7 +12,9 @@ import {
   Legend,
 } from 'recharts';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
-import { streams as seedStreams, mentions, sentimentTrend } from '@/lib/mock';
+import { streams as seedStreams, mentions as seedMentions, sentimentTrend as seedSentimentTrend } from '@/lib/mock';
+import { api } from '@/lib/api';
+import { toast } from '@/components/Toast';
 import { cn, formatNumber, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Stream, NetworkType } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,21 +23,44 @@ import { Plus, Radio, Heart, Repeat2, MessageCircle } from 'lucide-react';
 export default function ListeningPage() {
   const [streams, setStreams] = useState<Stream[]>(seedStreams);
   const [active, setActive] = useState(seedStreams[0].id);
+  const [feed, setFeed] = useState(seedMentions);
+  const [sentimentTrend, setSentimentTrend] = useState(seedSentimentTrend);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [keywords, setKeywords] = useState('');
 
-  const feed = mentions;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [streamsRes, mentionsRes, sentimentRes] = await Promise.all([
+          api.getStreams(),
+          api.getMentions(),
+          api.getSentiment(),
+        ]);
+        if (cancelled) return;
+        if (streamsRes?.length) { setStreams(streamsRes); setActive(streamsRes[0].id); }
+        if (mentionsRes?.length) setFeed(mentionsRes);
+        if (sentimentRes?.trend?.length) setSentimentTrend(sentimentRes.trend);
+      } catch {
+        // Live API unreachable — keep mock data so the page still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const total = feed.length;
   const pos = feed.filter((m) => m.sentiment === 'positive').length;
   const neg = feed.filter((m) => m.sentiment === 'negative').length;
 
-  const addStream = () => {
+  const addStream = async () => {
     if (!name.trim()) return;
+    const kw = keywords.split(',').map((k) => k.trim()).filter(Boolean);
     const s: Stream = {
       id: 's' + Date.now(),
       name,
-      keywords: keywords.split(',').map((k) => k.trim()).filter(Boolean),
+      keywords: kw,
       sources: ['twitter', 'instagram'] as NetworkType[],
       isActive: true,
       mentionCount: 0,
@@ -45,6 +70,12 @@ export default function ListeningPage() {
     setName('');
     setKeywords('');
     setCreating(false);
+    try {
+      const created = (await api.createStream({ name: s.name, keywords: kw, sources: s.sources })) as Stream;
+      setStreams((l: Stream[]) => [created, ...l.filter((x) => x.id !== s.id)]);
+    } catch {
+      // API unreachable — locally created stream stands as the offline result.
+    }
   };
 
   return (

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
-import { networks as seedNetworks, team, currentUser, auditLog } from '@/lib/mock';
+import { networks as seedNetworks, team as seedTeam, currentUser, auditLog } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { NETWORK_META, formatNumber } from '@/lib/utils';
-import type { Network, UserRole } from '@/lib/types';
+import type { Network, TeamMember, UserRole } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Plus, ScrollText, Plug, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -22,6 +23,40 @@ export default function SettingsPage() {
   const [networks, setNetworks] = useState<Network[]>(seedNetworks);
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
+  const [team, setTeam] = useState<TeamMember[]>(seedTeam);
+  const [inviting, setInviting] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getTeam();
+        if (!cancelled && res?.length) setTeam(res);
+      } catch {
+        // Live API unreachable — keep mock data so the page still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const invite = async () => {
+    if (!inviteName.trim() || !inviteEmail.trim()) return;
+    const member: TeamMember = { id: 't' + Date.now(), name: inviteName, email: inviteEmail, role: 'viewer', joinedAt: new Date().toISOString() };
+    setTeam((l) => [...l, member]);
+    toast.success(`Invited ${inviteEmail}`);
+    setInviteName('');
+    setInviteEmail('');
+    setInviting(false);
+    try {
+      const created = (await api.inviteMember({ name: member.name, email: member.email, role: member.role })) as TeamMember;
+      setTeam((l: TeamMember[]) => [...l.filter((m) => m.id !== member.id), created]);
+    } catch {
+      // API unreachable — locally added member stands as the offline result.
+    }
+  };
 
   const toggle = (id: string) =>
     setNetworks((l) =>
@@ -104,8 +139,15 @@ export default function SettingsPage() {
           <CardHeader
             title="Team members"
             subtitle={`${team.length} members`}
-            action={<Button size="sm"><Plus className="h-4 w-4" /> Invite</Button>}
+            action={<Button size="sm" onClick={() => setInviting((c) => !c)}><Plus className="h-4 w-4" /> Invite</Button>}
           />
+          {inviting && (
+            <div className="flex flex-wrap gap-2 border-b border-slate-100 p-4">
+              <input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Name" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-accent" />
+              <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-accent" />
+              <Button size="sm" onClick={invite}>Send invite</Button>
+            </div>
+          )}
           <div className="divide-y divide-slate-100">
             {team.map((m) => (
               <div key={m.id} className="flex items-center gap-3 px-5 py-3">

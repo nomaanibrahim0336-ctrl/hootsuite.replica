@@ -88,10 +88,13 @@ export const api = {
   schedulePost: (id: string, scheduledAt: string) =>
     request(`/posts/${id}/schedule`, { method: 'POST', body: JSON.stringify({ scheduledAt }) }),
   publishPost: (id: string) => request(`/posts/${id}/publish`, { method: 'POST' }),
+  approvePost: (id: string) => request(`/posts/${id}/approve`, { method: 'POST' }),
+  rejectPost: (id: string) => request(`/posts/${id}/reject`, { method: 'POST' }),
   getCalendar: () => request<any[]>('/posts/calendar'),
 
   // Inbox
   getInbox: (status?: string) => request<any[]>(`/inbox${status ? `?status=${status}` : ''}`),
+  markMessageRead: (id: string) => request(`/inbox/${id}/read`, { method: 'PUT' }),
   replyMessage: (id: string, content: string) =>
     request(`/inbox/${id}/reply`, { method: 'POST', body: JSON.stringify({ content }) }),
   assignMessage: (id: string, assignedTo: string) =>
@@ -132,4 +135,10 @@ export const api = {
   // Teams
   getTeam: () => request<any[]>('/teams'),
   inviteMember: (payload: any) => request('/teams/members', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Advocacy (Amplify)
+  getAdvocacyContent: () => request<any[]>('/advocacy/content'),
+  getAdvocacyAnalytics: () => request<{ totalShares: number; totalReach: number; leaderboard: any[] }>('/advocacy/analytics'),
+  shareAdvocacyContent: (id: string, payload: any) =>
+    request(`/advocacy/content/${id}/share`, { method: 'POST', body: JSON.stringify(payload) }),
 };

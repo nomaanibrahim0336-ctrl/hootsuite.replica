@@ -1,18 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, PageHeader, Button, Badge, Avatar } from '@/components/ui';
-import { advocacyContent, advocacyLeaderboard, advocacyStats } from '@/lib/mock';
+import { advocacyContent as seedContent, advocacyLeaderboard as seedLeaderboard, advocacyStats as seedStats } from '@/lib/mock';
+import { api } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { Megaphone, Share2, Trophy, Users, TrendingUp, Medal } from 'lucide-react';
 
 export default function AmplifyPage() {
   const [shared, setShared] = useState<Record<string, boolean>>({});
+  const [advocacyContent, setAdvocacyContent] = useState(seedContent);
+  const [advocacyLeaderboard, setAdvocacyLeaderboard] = useState(seedLeaderboard);
+  const [advocacyStats, setAdvocacyStats] = useState(seedStats);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [contentRes, analyticsRes] = await Promise.all([api.getAdvocacyContent(), api.getAdvocacyAnalytics()]);
+        if (cancelled) return;
+        if (contentRes?.length) setAdvocacyContent(contentRes);
+        if (analyticsRes) {
+          if (analyticsRes.leaderboard?.length) setAdvocacyLeaderboard(analyticsRes.leaderboard);
+          setAdvocacyStats({
+            totalShares: analyticsRes.totalShares,
+            totalReach: analyticsRes.totalReach,
+            activeAdvocates: analyticsRes.leaderboard?.length ?? seedStats.activeAdvocates,
+          });
+        }
+      } catch {
+        // Live API unreachable — keep mock data so the page still renders.
+        toast.info('Showing demo data — live API unreachable.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const share = (id: string, title: string) => {
     setShared((s) => ({ ...s, [id]: true }));
     toast.success(`Shared “${title}” to your networks 🎉`);
+    api.shareAdvocacyContent(id, {}).catch(() => {
+      // API unreachable — local share state stands as the offline result.
+    });
   };
 
   const medal = ['#FFB81C', '#B0B8C4', '#CD7F32'];
