@@ -15,6 +15,7 @@ import aiRoutes from './routes/ai';
 import teamRoutes from './routes/teams';
 import advocacyRoutes from './routes/advocacy';
 import auditRoutes from './routes/audit';
+import oauthRoutes from './routes/oauth';
 
 export function createApp() {
   const app = express();
@@ -90,6 +91,7 @@ export function createApp() {
 
   // Public
   app.use('/api/auth', authRoutes);
+  app.use('/api/oauth', oauthRoutes); // OAuth callbacks must be public (no JWT)
 
   // Protected
   app.use('/api/networks', requireAuth, networkRoutes);

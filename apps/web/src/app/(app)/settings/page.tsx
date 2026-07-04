@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
 import { networks as seedNetworks, team as seedTeam, currentUser, auditLog as seedAuditLog } from '@/lib/mock';
-import { api } from '@/lib/api';
+import { api, API_BASE } from '@/lib/api';
 import { NETWORK_META, formatNumber } from '@/lib/utils';
 import type { Network, TeamMember, UserRole, NetworkType } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -45,7 +46,14 @@ function explainNetworkFailure(error: string): string {
   return 'This app manages the connection record only — there is no real OAuth to a social platform yet, so this is a database round-trip failure, not a rejection from the network itself.';
 }
 
-export default function SettingsPage() {
+// Networks that use real OAuth (redirect flow) vs. simple DB toggle
+const OAUTH_NETWORKS: Partial<Record<NetworkType, string>> = {
+  facebook: 'facebook',
+  instagram: 'facebook', // Instagram is connected via Facebook app
+};
+
+function SettingsPage() {
+  const searchParams = useSearchParams();
   const [networks, setNetworks] = useState<Network[]>([]);
   const [networksLoaded, setNetworksLoaded] = useState(false);
   const [netTests, setNetTests] = useState<Record<string, NetTestState>>({});
@@ -56,6 +64,25 @@ export default function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
+
+  // Handle OAuth return — show success/error toast and clean the URL
+  useEffect(() => {
+    const success = searchParams.get('oauth_success');
+    const error = searchParams.get('oauth_error');
+    const network = searchParams.get('network');
+    if (success && network) {
+      toast.success(`${NETWORK_META[network as NetworkType]?.label ?? network} connected via OAuth!`);
+      // Clean URL without re-triggering navigation
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (error && network) {
+      if (error === 'missing_config') {
+        toast.error(`Facebook App not configured — add FACEBOOK_APP_ID + FACEBOOK_APP_SECRET to Railway env vars.`);
+      } else {
+        toast.error(`Could not connect ${network}: ${decodeURIComponent(error)}`);
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +144,15 @@ export default function SettingsPage() {
   const toggle = async (type: NetworkType) => {
     const target = displayNetworks.find((n) => n.type === type)!;
     const connecting = !target.connected;
+
+    if (connecting && OAUTH_NETWORKS[type]) {
+      // Real OAuth flow — redirect to backend OAuth initiation endpoint
+      const oauthNetwork = OAUTH_NETWORKS[type];
+      const returnTo = window.location.href.split('?')[0]; // current page without params
+      window.location.href = `${API_BASE}/api/oauth/${oauthNetwork}?returnTo=${encodeURIComponent(returnTo)}`;
+      return;
+    }
+
     toast.success(`${NETWORK_META[type].label} ${connecting ? 'connected' : 'disconnected'}`);
     try {
       if (connecting) {
@@ -217,7 +253,9 @@ export default function SettingsPage() {
                         <Button variant="secondary" size="sm" onClick={() => toggle(n.type)}>Disconnect</Button>
                       </>
                     ) : (
-                      <Button size="sm" onClick={() => toggle(n.type)}>Connect</Button>
+                      <Button size="sm" onClick={() => toggle(n.type)}>
+                        {OAUTH_NETWORKS[n.type] ? `Connect with ${NETWORK_META[n.type].label}` : 'Connect'}
+                      </Button>
                     )}
                   </div>
                   {t.status === 'fail' && (
@@ -285,5 +323,13 @@ export default function SettingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPageWrapper() {
+  return (
+    <Suspense>
+      <SettingsPage />
+    </Suspense>
   );
 }

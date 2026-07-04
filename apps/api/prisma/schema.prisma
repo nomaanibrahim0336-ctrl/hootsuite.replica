@@ -25,13 +25,18 @@ model User {
 }
 
 model Network {
-  id          String   @id @default(uuid())
-  type        String
-  name        String
-  username    String
-  followers   Int      @default(0)
-  connected   Boolean  @default(true)
-  connectedAt DateTime @default(now())
+  id             String    @id @default(uuid())
+  type           String
+  name           String
+  username       String
+  followers      Int       @default(0)
+  connected      Boolean   @default(true)
+  connectedAt    DateTime  @default(now())
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  pageId         String?
+  pageAccessToken String?
 }
 
 model Post {
