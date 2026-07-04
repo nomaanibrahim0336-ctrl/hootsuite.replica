@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "prisma generate --schema prisma/schema.postgres.prisma && tsc",
+    "build": "prisma generate --schema prisma/schema.prisma && tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:push:supabase": "prisma db push --schema prisma/schema.postgres.prisma",
     "db:generate:supabase": "prisma generate --schema prisma/schema.postgres.prisma",
     "db:seed": "ts-node-dev --transpile-only prisma/seed.ts",
-    "pretest": "prisma generate && DATABASE_URL=file:/tmp/socialhub-test.db prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss --force-reset",
+    "pretest": "prisma generate --schema prisma/schema.prisma && DATABASE_URL=file:/tmp/socialhub-test.db prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss --force-reset",
     "test": "jest --runInBand --forceExit"
   },
   "prisma": {
