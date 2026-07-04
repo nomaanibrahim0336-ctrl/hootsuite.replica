@@ -18,6 +18,10 @@ import auditRoutes from './routes/audit';
 export function createApp() {
   const app = express();
 
+  // Railway (and most PaaS) sit behind a reverse proxy that sets X-Forwarded-For;
+  // without this express-rate-limit throws on every request.
+  app.set('trust proxy', 1);
+
   app.use(helmet());
   app.use(cors({
     origin: (origin, cb) => {
