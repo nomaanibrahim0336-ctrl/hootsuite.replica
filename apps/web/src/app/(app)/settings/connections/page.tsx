@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/components/ui';
 import { toast } from '@/components/Toast';
-import { NETWORK_META } from '@/lib/utils';
+import { NETWORK_META, cn } from '@/lib/utils';
 import type { NetworkType } from '@/lib/types';
-import { Database, Server, Sparkles, Plug, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
+import { diagnostics, API_BASE, type DiagResult } from '@/lib/api';
+import { Database, Server, Sparkles, Plug, CheckCircle2, XCircle, ExternalLink, ShieldCheck, Cloud, Loader2, PlayCircle } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kvrhkseifkwshnqfvldu.supabase.co';
@@ -21,6 +22,105 @@ function StatusDot({ state }: { state: Health }) {
 }
 
 const socials: NetworkType[] = ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok'];
+
+type TestKey = 'api' | 'database' | 'auth' | 'supabase';
+type TestState = { status: 'idle' | 'running' | 'pass' | 'fail'; result?: DiagResult };
+
+const TEST_META: Record<TestKey, { label: string; desc: string; icon: any }> = {
+  api: { label: 'Backend API (Railway)', desc: 'GET /health on the Express service', icon: Server },
+  database: { label: 'Database (Supabase via API)', desc: 'API round-trips a real query to Postgres', icon: Database },
+  auth: { label: 'Authentication', desc: 'Your stored token against a protected route', icon: ShieldCheck },
+  supabase: { label: 'Supabase REST (direct)', desc: 'Browser → Supabase anon endpoint', icon: Cloud },
+};
+
+function DiagnosticsPanel() {
+  const [tests, setTests] = useState<Record<TestKey, TestState>>({
+    api: { status: 'idle' }, database: { status: 'idle' }, auth: { status: 'idle' }, supabase: { status: 'idle' },
+  });
+  const [runningAll, setRunningAll] = useState(false);
+
+  const supabaseProbe = async (): Promise<DiagResult> => {
+    const started = Date.now();
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/`, { headers: { apikey: SUPABASE_ANON } });
+      return { ok: res.ok || res.status === 200, latencyMs: Date.now() - started, error: res.ok ? undefined : `HTTP ${res.status}` };
+    } catch (e: any) {
+      return { ok: false, latencyMs: Date.now() - started, error: e?.message || 'Network error' };
+    }
+  };
+
+  const runners: Record<TestKey, () => Promise<DiagResult>> = {
+    api: diagnostics.api,
+    database: diagnostics.database,
+    auth: diagnostics.auth,
+    supabase: supabaseProbe,
+  };
+
+  const runOne = async (key: TestKey) => {
+    setTests((t) => ({ ...t, [key]: { status: 'running' } }));
+    const result = await runners[key]();
+    setTests((t) => ({ ...t, [key]: { status: result.ok ? 'pass' : 'fail', result } }));
+    return result;
+  };
+
+  const runAll = async () => {
+    setRunningAll(true);
+    for (const key of Object.keys(TEST_META) as TestKey[]) await runOne(key);
+    setRunningAll(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Connectivity diagnostics"
+        subtitle="Test each layer of the stack and see the exact error when something fails."
+        action={
+          <Button size="sm" onClick={runAll} disabled={runningAll}>
+            {runningAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+            Run all tests
+          </Button>
+        }
+      />
+      <div className="mb-3 px-5 pt-3 text-xs text-slate-400">
+        API target: <code className="rounded bg-slate-100 px-1 py-0.5">{API_BASE}</code>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {(Object.keys(TEST_META) as TestKey[]).map((key) => {
+          const meta = TEST_META[key];
+          const t = tests[key];
+          const Icon = meta.icon;
+          return (
+            <div key={key} className="flex items-start gap-4 px-5 py-4">
+              <span className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                t.status === 'pass' ? 'bg-emerald-100 text-emerald-700' : t.status === 'fail' ? 'bg-red-100 text-negative' : 'bg-slate-100 text-slate-500'
+              )}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-slate-800">{meta.label}</p>
+                <p className="text-xs text-slate-400">{meta.desc}</p>
+                {t.status === 'fail' && t.result?.error && (
+                  <p className="mt-1.5 break-words rounded-md bg-red-50 px-2 py-1 font-mono text-xs text-negative">{t.result.error}</p>
+                )}
+                {t.status === 'pass' && t.result?.detail && (
+                  <p className="mt-1.5 break-words rounded-md bg-emerald-50 px-2 py-1 font-mono text-[11px] text-emerald-700">{t.result.detail}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {t.result && <span className="text-xs text-slate-400">{t.result.latencyMs}ms</span>}
+                {t.status === 'pass' && <Badge color="green"><CheckCircle2 className="mr-1 inline h-3 w-3" /> Pass</Badge>}
+                {t.status === 'fail' && <Badge color="red"><XCircle className="mr-1 inline h-3 w-3" /> Fail</Badge>}
+                {t.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-accent-deep" />}
+                <Button variant="secondary" size="sm" onClick={() => runOne(key)} disabled={t.status === 'running'}>Test</Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 export default function ConnectionsPage() {
   const [apiHealth, setApiHealth] = useState<Health>('checking');
@@ -64,6 +164,8 @@ export default function ConnectionsPage() {
       />
 
       <div className="space-y-6">
+        <DiagnosticsPanel />
+
         {/* Database — Supabase */}
         <Card>
           <CardHeader title="Database" subtitle="Postgres persistence layer" action={<Database className="h-5 w-5 text-accent-deep" />} />

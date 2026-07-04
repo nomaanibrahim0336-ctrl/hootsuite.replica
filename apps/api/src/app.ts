@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import { requireAuth } from './auth';
+import { prisma } from './prisma';
 import authRoutes from './routes/auth';
 import networkRoutes from './routes/networks';
 import postRoutes from './routes/posts';
@@ -64,6 +65,28 @@ export function createApp() {
   }
 
   app.get('/health', (_req, res) => res.json({ success: true, data: { status: 'ok', uptime: process.uptime() } }));
+
+  // Deep health check: actually round-trips to the database so the diagnostics
+  // panel can distinguish "API up but DB unreachable" from a healthy stack, and
+  // surface the real Postgres/Prisma error text (e.g. bad DATABASE_URL, pooler
+  // prepared-statement errors) instead of a generic failure. Public on purpose
+  // so it works even when auth is misconfigured.
+  app.get('/health/db', async (_req, res) => {
+    const startedAt = Date.now();
+    try {
+      const users = await prisma.user.count();
+      res.json({
+        success: true,
+        data: { status: 'ok', latencyMs: Date.now() - startedAt, users },
+      });
+    } catch (e: any) {
+      res.status(503).json({
+        success: false,
+        error: e?.message?.slice(0, 500) || 'Database query failed',
+        data: { status: 'error', latencyMs: Date.now() - startedAt },
+      });
+    }
+  });
 
   // Public
   app.use('/api/auth', authRoutes);

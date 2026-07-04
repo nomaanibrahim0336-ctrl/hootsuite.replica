@@ -10,6 +10,14 @@ describe('Auth', () => {
     expect(res.body.data.status).toBe('ok');
   });
 
+  it('deep DB health check round-trips to the database', async () => {
+    const res = await request(app).get('/health/db');
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('ok');
+    expect(typeof res.body.data.users).toBe('number');
+    expect(typeof res.body.data.latencyMs).toBe('number');
+  });
+
   it('registers a new user and returns tokens', async () => {
     const email = `reg${Date.now()}@test.com`;
     const res = await request(app).post('/api/auth/register').send({ email, password: 'secret123', name: 'Reg' });

@@ -52,6 +52,44 @@ export interface AiProvider {
   envKey?: string;
 }
 
+export const API_BASE = BASE;
+
+export type DiagResult = {
+  ok: boolean;
+  latencyMs: number;
+  detail?: string;
+  error?: string;
+};
+
+/** Raw connectivity probe used by the Settings diagnostics panel. Bypasses the
+ *  authed `request()` wrapper so it reports the true transport-level result
+ *  (network error, CORS, non-2xx) instead of falling into token-refresh logic. */
+async function probe(path: string, opts: RequestInit = {}): Promise<DiagResult> {
+  const started = Date.now();
+  try {
+    const res = await fetch(`${BASE}${path}`, opts);
+    const latencyMs = Date.now() - started;
+    let body: any = null;
+    try { body = await res.json(); } catch { /* non-JSON response */ }
+    if (!res.ok) {
+      return { ok: false, latencyMs, error: body?.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, latencyMs, detail: body?.data ? JSON.stringify(body.data) : undefined };
+  } catch (e: any) {
+    return { ok: false, latencyMs: Date.now() - started, error: e?.message || 'Network error (unreachable / CORS)' };
+  }
+}
+
+export const diagnostics = {
+  api: () => probe('/health'),
+  database: () => probe('/health/db'),
+  auth: async (): Promise<DiagResult> => {
+    const token = getToken();
+    if (!token) return { ok: false, latencyMs: 0, error: 'Not signed in (no token stored)' };
+    return probe('/api/posts', { headers: { Authorization: `Bearer ${token}` } });
+  },
+};
+
 interface ApiResult<T> {
   success: boolean;
   data: T;
