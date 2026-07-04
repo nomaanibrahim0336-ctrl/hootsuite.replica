@@ -5,9 +5,9 @@ import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from
 import { networks as seedNetworks, team as seedTeam, currentUser, auditLog as seedAuditLog } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { NETWORK_META, formatNumber } from '@/lib/utils';
-import type { Network, TeamMember, UserRole } from '@/lib/types';
+import type { Network, TeamMember, UserRole, NetworkType } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Plus, ScrollText, Plug, ChevronRight } from 'lucide-react';
+import { Plus, ScrollText, Plug, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { AiSettingsPanel } from '@/components/AiSettingsPanel';
 import { toast } from '@/components/Toast';
@@ -19,8 +19,36 @@ const roleColor: Record<UserRole, string> = {
   viewer: 'slate',
 };
 
+const SUPPORTED_NETWORKS: NetworkType[] = ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok'];
+
+type NetTestState = { status: 'idle' | 'running' | 'pass' | 'fail'; latencyMs?: number; error?: string; reason?: string };
+
+/** Plain-English cause for a network connect/test failure, same pattern as the
+ *  Connections diagnostics panel — a raw error code alone isn't actionable. */
+function explainNetworkFailure(error: string): string {
+  const e = error.toLowerCase();
+  if (e.includes('failed to fetch') || e.includes('network error') || e.includes('unreachable')) {
+    return 'The backend API is unreachable from your browser — check Settings → Connections → "Backend API" test.';
+  }
+  if (e.includes('http 401') || e.includes('missing or invalid') || e.includes('expired')) {
+    return "You're signed out or your session expired — log out and back in, then retry.";
+  }
+  if (e.includes('http 403')) {
+    return 'Your account role does not have permission to manage connections.';
+  }
+  if (e.includes('http 404') || e.includes('not found')) {
+    return 'The backend is running an older build without this endpoint — it may need a fresh deploy.';
+  }
+  if (e.includes('http 5')) {
+    return 'The backend hit a server error handling this request — check Railway deploy logs.';
+  }
+  return 'This app manages the connection record only — there is no real OAuth to a social platform yet, so this is a database round-trip failure, not a rejection from the network itself.';
+}
+
 export default function SettingsPage() {
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [networksLoaded, setNetworksLoaded] = useState(false);
+  const [netTests, setNetTests] = useState<Record<string, NetTestState>>({});
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -41,6 +69,7 @@ export default function SettingsPage() {
         if (cancelled) return;
         setTeam(teamRes ?? []);
         setNetworks(networksRes ?? []);
+        setNetworksLoaded(true);
         if (auditRes) {
           setAuditLog(auditRes.map((e: any) => ({
             id: e.id, action: e.action, entity: e.entity, actor: e.userId ?? 'system', timestamp: e.createdAt,
@@ -51,6 +80,7 @@ export default function SettingsPage() {
         // Live API unreachable — fall back to demo data so the page still renders.
         setTeam(seedTeam);
         setNetworks(seedNetworks);
+        setNetworksLoaded(true);
         setAuditLog(seedAuditLog);
         toast.info('Showing demo data — live API unreachable.');
       }
@@ -74,16 +104,50 @@ export default function SettingsPage() {
     }
   };
 
-  const toggle = (id: string) => {
-    const target = networks.find((n) => n.id === id);
-    if (!target) return;
-    const connected = !target.connected;
-    setNetworks((l) => l.map((n) => (n.id === id ? { ...n, connected, followers: connected ? n.followers : 0 } : n)));
-    toast.success(`${NETWORK_META[target.type].label} ${connected ? 'connected' : 'disconnected'}`);
-    (connected ? api.connectNetwork({ type: target.type, name: target.username, username: target.username }) : api.disconnectNetwork(id))
-      .catch(() => {
-        // Live API unreachable — local toggle stands as the offline result.
-      });
+  // Always show every supported network; merge in the real DB row when one exists
+  // so a network the API hasn't created yet still renders with a Connect button.
+  const displayNetworks: Network[] = SUPPORTED_NETWORKS.map((type) => {
+    const existing = networks.find((n) => n.type === type);
+    return existing ?? {
+      id: '', type, name: NETWORK_META[type].label, username: '', followers: 0,
+      connected: false, connectedAt: new Date().toISOString(),
+    };
+  });
+
+  const toggle = async (type: NetworkType) => {
+    const target = displayNetworks.find((n) => n.type === type)!;
+    const connecting = !target.connected;
+    toast.success(`${NETWORK_META[type].label} ${connecting ? 'connected' : 'disconnected'}`);
+    try {
+      if (connecting) {
+        const created = (await api.connectNetwork({ type, name: NETWORK_META[type].label, username: `@${type}` })) as Network;
+        setNetworks((l) => [...l.filter((n) => n.type !== type), created]);
+      } else if (target.id) {
+        await api.disconnectNetwork(target.id);
+        setNetworks((l) => l.map((n) => (n.type === type ? { ...n, connected: false, followers: 0 } : n)));
+      }
+    } catch (e: any) {
+      toast.error(`Could not ${connecting ? 'connect' : 'disconnect'} ${NETWORK_META[type].label} — API unreachable`);
+    }
+  };
+
+  const testNetwork = async (type: NetworkType) => {
+    setNetTests((t) => ({ ...t, [type]: { status: 'running' } }));
+    const started = Date.now();
+    try {
+      const fresh = await api.getNetworks();
+      const latencyMs = Date.now() - started;
+      const row = (fresh as Network[])?.find((n) => n.type === type);
+      setNetworks(fresh ?? []);
+      setNetTests((t) => ({
+        ...t,
+        [type]: { status: 'pass', latencyMs, reason: row?.connected ? `Connected · ${formatNumber(row.followers)} followers, verified via live DB round-trip.` : 'Reachable — currently not connected.' },
+      }));
+    } catch (e: any) {
+      const latencyMs = Date.now() - started;
+      const error = e?.message || 'Request failed';
+      setNetTests((t) => ({ ...t, [type]: { status: 'fail', latencyMs, error, reason: explainNetworkFailure(error) } }));
+    }
   };
 
   return (
@@ -125,27 +189,51 @@ export default function SettingsPage() {
 
         {/* Connected networks */}
         <Card>
-          <CardHeader title="Connected accounts" subtitle="Connect your social networks to publish and monitor." />
+          <CardHeader title="Connected accounts" subtitle="Connect your social networks to publish and monitor. Test verifies the connection round-trips through the live database." />
           <div className="divide-y divide-slate-100">
-            {networks.map((n) => (
-              <div key={n.id} className="flex items-center gap-4 px-5 py-4">
-                <NetworkChip type={n.type} size={40} />
-                <div className="flex-1">
-                  <p className="font-medium text-slate-800">{NETWORK_META[n.type].label}</p>
-                  <p className="text-sm text-slate-400">
-                    {n.connected ? `${n.username} · ${formatNumber(n.followers)} followers` : 'Not connected'}
-                  </p>
+            {!networksLoaded && (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">Loading connections…</div>
+            )}
+            {networksLoaded && displayNetworks.map((n) => {
+              const t = netTests[n.type] ?? { status: 'idle' as const };
+              return (
+                <div key={n.type} className="px-5 py-4">
+                  <div className="flex items-center gap-4">
+                    <NetworkChip type={n.type} size={40} />
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-800">{NETWORK_META[n.type].label}</p>
+                      <p className="text-sm text-slate-400">
+                        {n.connected ? `${n.username} · ${formatNumber(n.followers)} followers` : 'Not connected'}
+                      </p>
+                    </div>
+                    {t.status === 'pass' && <Badge color="green"><CheckCircle2 className="mr-1 inline h-3 w-3" /> Test passed</Badge>}
+                    {t.status === 'fail' && <Badge color="red"><XCircle className="mr-1 inline h-3 w-3" /> Test failed</Badge>}
+                    <Button variant="secondary" size="sm" onClick={() => testNetwork(n.type)} disabled={t.status === 'running'}>
+                      {t.status === 'running' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test'}
+                    </Button>
+                    {n.connected ? (
+                      <>
+                        <Badge color="green">Connected</Badge>
+                        <Button variant="secondary" size="sm" onClick={() => toggle(n.type)}>Disconnect</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" onClick={() => toggle(n.type)}>Connect</Button>
+                    )}
+                  </div>
+                  {t.status === 'fail' && (
+                    <div className="mt-2 ml-14 space-y-1.5">
+                      <p className="break-words rounded-md bg-red-50 px-2 py-1 font-mono text-xs text-negative">{t.error}</p>
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+                        <span className="font-semibold">Likely cause:</span> {t.reason}
+                      </div>
+                    </div>
+                  )}
+                  {t.status === 'pass' && t.reason && (
+                    <p className="ml-14 mt-2 break-words rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-700">{t.reason} ({t.latencyMs}ms)</p>
+                  )}
                 </div>
-                {n.connected ? (
-                  <>
-                    <Badge color="green">Connected</Badge>
-                    <Button variant="secondary" size="sm" onClick={() => toggle(n.id)}>Disconnect</Button>
-                  </>
-                ) : (
-                  <Button size="sm" onClick={() => toggle(n.id)}>Connect</Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 
