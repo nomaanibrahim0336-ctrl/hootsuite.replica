@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const [networks, setNetworks] = useState<Network[]>(seedNetworks);
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
-  const [team, setTeam] = useState<TeamMember[]>(seedTeam);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -33,9 +33,11 @@ export default function SettingsPage() {
     (async () => {
       try {
         const res = await api.getTeam();
-        if (!cancelled && res?.length) setTeam(res);
+        if (!cancelled) setTeam(res ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the page still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the page still renders.
+        setTeam(seedTeam);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

@@ -23,7 +23,7 @@ const approvalColor: Record<string, string> = { pending: 'amber', approved: 'gre
 
 export default function PublisherPage() {
   const openComposer = useUiStore((s) => s.openComposer);
-  const [list, setList] = useState<Post[]>(seedPosts);
+  const [list, setList] = useState<Post[]>([]);
   const [filter, setFilter] = useState<'all' | PostStatus>('all');
   const [toDelete, setToDelete] = useState<Post | null>(null);
 
@@ -32,9 +32,11 @@ export default function PublisherPage() {
     (async () => {
       try {
         const res = await api.getPosts();
-        if (!cancelled && res?.length) setList(res);
+        if (!cancelled) setList(res ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the page still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the page still renders.
+        setList(seedPosts);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

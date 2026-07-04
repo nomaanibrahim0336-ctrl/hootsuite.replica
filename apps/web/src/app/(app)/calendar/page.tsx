@@ -18,7 +18,7 @@ export default function CalendarPage() {
   const openComposer = useUiStore((s) => s.openComposer);
   const [cursor, setCursor] = useState(new Date());
   const [view, setView] = useState<'month' | 'week'>('month');
-  const [list, setList] = useState<Post[]>(seedPosts);
+  const [list, setList] = useState<Post[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,9 +26,11 @@ export default function CalendarPage() {
     (async () => {
       try {
         const res = await api.getPosts();
-        if (!cancelled && res?.length) setList(res);
+        if (!cancelled) setList(res ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the planner still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the planner still renders.
+        setList(seedPosts);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

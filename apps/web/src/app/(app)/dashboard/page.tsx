@@ -16,10 +16,10 @@ const kindLabel: Record<string, string> = { message: 'New message', mention: 'Me
 export default function DashboardPage() {
   const [range, setRange] = useState<(typeof RANGES)[number]>('30 days');
   const [loading, setLoading] = useState(true);
-  const [dashboardMetrics, setDashboardMetrics] = useState(mockMetrics);
-  const [analyticsTrend, setAnalyticsTrend] = useState(mockTrend);
-  const [posts, setPosts] = useState(mockPosts);
-  const [networks, setNetworks] = useState(mockNetworks);
+  const [dashboardMetrics, setDashboardMetrics] = useState<typeof mockMetrics>([]);
+  const [analyticsTrend, setAnalyticsTrend] = useState<typeof mockTrend>([]);
+  const [posts, setPosts] = useState<typeof mockPosts>([]);
+  const [networks, setNetworks] = useState<typeof mockNetworks>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,12 +31,17 @@ export default function DashboardPage() {
           api.getNetworks(),
         ]);
         if (cancelled) return;
-        if (metricsRes?.metrics?.length) setDashboardMetrics(metricsRes.metrics);
-        if (metricsRes?.trend?.length) setAnalyticsTrend(metricsRes.trend);
-        if (postsRes?.length) setPosts(postsRes);
-        if (networksRes?.length) setNetworks(networksRes);
+        setDashboardMetrics(metricsRes?.metrics ?? []);
+        setAnalyticsTrend(metricsRes?.trend ?? []);
+        setPosts(postsRes ?? []);
+        setNetworks(networksRes ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the dashboard still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the dashboard still renders.
+        setDashboardMetrics(mockMetrics);
+        setAnalyticsTrend(mockTrend);
+        setPosts(mockPosts);
+        setNetworks(mockNetworks);
         toast.info('Showing demo data — live API unreachable.');
       } finally {
         if (!cancelled) setLoading(false);

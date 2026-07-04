@@ -14,10 +14,10 @@ import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Cloc
 const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolved'];
 
 export default function InboxPage() {
-  const [list, setList] = useState<Message[]>(seed);
-  const [savedReplies, setSavedReplies] = useState(seedSavedReplies);
+  const [list, setList] = useState<Message[]>([]);
+  const [savedReplies, setSavedReplies] = useState<typeof seedSavedReplies>([]);
   const [filter, setFilter] = useState<(typeof filters)[number]>('all');
-  const [activeId, setActiveId] = useState(seed[0].id);
+  const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [reply, setReply] = useState('');
   const [note, setNote] = useState('');
 
@@ -27,10 +27,15 @@ export default function InboxPage() {
       try {
         const [messagesRes, repliesRes] = await Promise.all([api.getInbox(), api.getSavedReplies()]);
         if (cancelled) return;
-        if (messagesRes?.length) { setList(messagesRes); setActiveId(messagesRes[0].id); }
-        if (repliesRes?.length) setSavedReplies(repliesRes);
+        setList(messagesRes ?? []);
+        setActiveId(messagesRes?.[0]?.id);
+        setSavedReplies(repliesRes ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the inbox still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the inbox still renders.
+        setList(seed);
+        setActiveId(seed[0]?.id);
+        setSavedReplies(seedSavedReplies);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

@@ -36,10 +36,10 @@ function downloadCsv(name: string, metrics: typeof seedMetrics) {
 }
 
 export default function AnalyticsPage() {
-  const [analyticsMetrics, setAnalyticsMetrics] = useState(seedMetrics);
-  const [analyticsTrend, setAnalyticsTrend] = useState(seedTrend);
-  const [networkBreakdown, setNetworkBreakdown] = useState(seedBreakdown);
-  const [reports, setReports] = useState(seedReports);
+  const [analyticsMetrics, setAnalyticsMetrics] = useState<typeof seedMetrics>([]);
+  const [analyticsTrend, setAnalyticsTrend] = useState<typeof seedTrend>([]);
+  const [networkBreakdown, setNetworkBreakdown] = useState<typeof seedBreakdown>([]);
+  const [reports, setReports] = useState<typeof seedReports>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,12 +47,17 @@ export default function AnalyticsPage() {
       try {
         const [metricsRes, reportsRes] = await Promise.all([api.getMetrics(), api.getReports()]);
         if (cancelled) return;
-        if (metricsRes?.metrics?.length) setAnalyticsMetrics(metricsRes.metrics);
-        if (metricsRes?.trend?.length) setAnalyticsTrend(metricsRes.trend);
-        if (metricsRes?.networkBreakdown?.length) setNetworkBreakdown(metricsRes.networkBreakdown);
-        if (reportsRes?.length) setReports(reportsRes);
+        setAnalyticsMetrics(metricsRes?.metrics ?? []);
+        setAnalyticsTrend(metricsRes?.trend ?? []);
+        setNetworkBreakdown(metricsRes?.networkBreakdown ?? []);
+        setReports(reportsRes ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the page still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the page still renders.
+        setAnalyticsMetrics(seedMetrics);
+        setAnalyticsTrend(seedTrend);
+        setNetworkBreakdown(seedBreakdown);
+        setReports(seedReports);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

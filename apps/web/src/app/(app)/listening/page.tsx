@@ -21,10 +21,10 @@ import { formatDistanceToNow } from 'date-fns';
 import { Plus, Radio, Heart, Repeat2, MessageCircle } from 'lucide-react';
 
 export default function ListeningPage() {
-  const [streams, setStreams] = useState<Stream[]>(seedStreams);
-  const [active, setActive] = useState(seedStreams[0].id);
-  const [feed, setFeed] = useState(seedMentions);
-  const [sentimentTrend, setSentimentTrend] = useState(seedSentimentTrend);
+  const [streams, setStreams] = useState<Stream[]>([]);
+  const [active, setActive] = useState<string | undefined>(undefined);
+  const [feed, setFeed] = useState<typeof seedMentions>([]);
+  const [sentimentTrend, setSentimentTrend] = useState<typeof seedSentimentTrend>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [keywords, setKeywords] = useState('');
@@ -39,11 +39,17 @@ export default function ListeningPage() {
           api.getSentiment(),
         ]);
         if (cancelled) return;
-        if (streamsRes?.length) { setStreams(streamsRes); setActive(streamsRes[0].id); }
-        if (mentionsRes?.length) setFeed(mentionsRes);
-        if (sentimentRes?.trend?.length) setSentimentTrend(sentimentRes.trend);
+        setStreams(streamsRes ?? []);
+        setActive(streamsRes?.[0]?.id);
+        setFeed(mentionsRes ?? []);
+        setSentimentTrend(sentimentRes?.trend ?? []);
       } catch {
-        // Live API unreachable — keep mock data so the page still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the page still renders.
+        setStreams(seedStreams);
+        setActive(seedStreams[0]?.id);
+        setFeed(seedMentions);
+        setSentimentTrend(seedSentimentTrend);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();

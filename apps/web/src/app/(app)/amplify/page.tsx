@@ -10,9 +10,9 @@ import { Megaphone, Share2, Trophy, Users, TrendingUp, Medal } from 'lucide-reac
 
 export default function AmplifyPage() {
   const [shared, setShared] = useState<Record<string, boolean>>({});
-  const [advocacyContent, setAdvocacyContent] = useState(seedContent);
-  const [advocacyLeaderboard, setAdvocacyLeaderboard] = useState(seedLeaderboard);
-  const [advocacyStats, setAdvocacyStats] = useState(seedStats);
+  const [advocacyContent, setAdvocacyContent] = useState<typeof seedContent>([]);
+  const [advocacyLeaderboard, setAdvocacyLeaderboard] = useState<typeof seedLeaderboard>([]);
+  const [advocacyStats, setAdvocacyStats] = useState({ totalShares: 0, totalReach: 0, activeAdvocates: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -20,17 +20,19 @@ export default function AmplifyPage() {
       try {
         const [contentRes, analyticsRes] = await Promise.all([api.getAdvocacyContent(), api.getAdvocacyAnalytics()]);
         if (cancelled) return;
-        if (contentRes?.length) setAdvocacyContent(contentRes);
-        if (analyticsRes) {
-          if (analyticsRes.leaderboard?.length) setAdvocacyLeaderboard(analyticsRes.leaderboard);
-          setAdvocacyStats({
-            totalShares: analyticsRes.totalShares,
-            totalReach: analyticsRes.totalReach,
-            activeAdvocates: analyticsRes.leaderboard?.length ?? seedStats.activeAdvocates,
-          });
-        }
+        setAdvocacyContent(contentRes ?? []);
+        setAdvocacyLeaderboard(analyticsRes?.leaderboard ?? []);
+        setAdvocacyStats({
+          totalShares: analyticsRes?.totalShares ?? 0,
+          totalReach: analyticsRes?.totalReach ?? 0,
+          activeAdvocates: analyticsRes?.leaderboard?.length ?? 0,
+        });
       } catch {
-        // Live API unreachable — keep mock data so the page still renders.
+        if (cancelled) return;
+        // Live API unreachable — fall back to demo data so the page still renders.
+        setAdvocacyContent(seedContent);
+        setAdvocacyLeaderboard(seedLeaderboard);
+        setAdvocacyStats(seedStats);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();
