@@ -33,6 +33,40 @@ const TEST_META: Record<TestKey, { label: string; desc: string; icon: any }> = {
   supabase: { label: 'Supabase REST (direct)', desc: 'Browser → Supabase anon endpoint', icon: Cloud },
 };
 
+/** Turn a raw error string into a plain-English likely cause + suggested fix,
+ *  per test type, so a failure is actionable instead of just a status code. */
+function explainFailure(key: TestKey, error: string | undefined): { cause: string; fix: string } {
+  const e = (error || '').toLowerCase();
+
+  const networkDown = e.includes('failed to fetch') || e.includes('network error') || e.includes('unreachable') || e.includes('load failed');
+
+  if (key === 'api') {
+    if (networkDown) return { cause: 'The Railway service is unreachable from your browser.', fix: 'Check Railway → Deployments: is the service Active/Online, or crashed/sleeping? Also confirm NEXT_PUBLIC_API_URL points at the right URL.' };
+    if (e.includes('http 5')) return { cause: 'The API responded but crashed handling the request.', fix: 'Check Railway → Deploy Logs for a stack trace at this exact time.' };
+    return { cause: 'Unexpected response from the health check.', fix: 'Open the API target URL + /health directly in a browser tab to see the raw response.' };
+  }
+
+  if (key === 'database') {
+    if (e.includes('http 404') || e.includes('not found')) return { cause: "The deployed API doesn't have this endpoint yet — Railway is running an older build.", fix: 'Push a commit that touches apps/api/ (or use Railway\'s "Deploy latest commit"), then confirm the new deployment references your latest commit SHA, not a stale one.' };
+    if (e.includes('http 401') || e.includes('http 403')) return { cause: 'The request was blocked before it reached the database check.', fix: 'This endpoint is meant to be public — if you see this, check CORS_ORIGINS and the auth middleware ordering in apps/api/src/app.ts.' };
+    if (e.includes('prepared statement') || e.includes('pgbouncer')) return { cause: 'Prisma is hitting a connection-pooler prepared-statement conflict.', fix: 'Add ?pgbouncer=true&connection_limit=1 to the end of DATABASE_URL in Railway.' };
+    if (networkDown) return { cause: 'The API itself is unreachable, so it never got to test the database.', fix: 'Fix the "Backend API" test above first — this one will follow.' };
+    if (e.includes('http 5') || e.includes('database query failed')) return { cause: 'The API reached the database layer but the query failed.', fix: 'Check DATABASE_URL is correct and the database is not paused/deleted in Supabase.' };
+    return { cause: 'The database round-trip failed for an uncommon reason.', fix: 'Check Railway → Deploy Logs around this timestamp for the real Postgres/Prisma error.' };
+  }
+
+  if (key === 'auth') {
+    if (e.includes('no token stored')) return { cause: "You're not signed in — there's no token in this browser.", fix: 'Log in from /login, then re-run this test.' };
+    if (e.includes('invalid or expired') || e.includes('http 401')) return { cause: 'Your stored token is invalid or expired and refresh also failed.', fix: 'Log out fully, clear local storage for this site, and log back in.' };
+    if (networkDown) return { cause: 'Could not reach the API to check the token.', fix: 'Fix the "Backend API" test above first.' };
+    return { cause: 'The protected route rejected the request for an uncommon reason.', fix: 'Check Railway → Deploy Logs at this timestamp.' };
+  }
+
+  // supabase (direct)
+  if (networkDown) return { cause: 'The browser could not reach Supabase at all.', fix: 'Check NEXT_PUBLIC_SUPABASE_URL is correct and the Supabase project is not paused.' };
+  return { cause: 'An unexpected response from Supabase REST.', fix: 'Confirm NEXT_PUBLIC_SUPABASE_ANON_KEY matches the project shown in your Supabase dashboard.' };
+}
+
 function DiagnosticsPanel() {
   const [tests, setTests] = useState<Record<TestKey, TestState>>({
     api: { status: 'idle' }, database: { status: 'idle' }, auth: { status: 'idle' }, supabase: { status: 'idle' },
@@ -108,7 +142,18 @@ function DiagnosticsPanel() {
                 <p className="font-medium text-slate-800">{meta.label}</p>
                 <p className="text-xs text-slate-400">{meta.desc}</p>
                 {t.status === 'fail' && t.result?.error && (
-                  <p className="mt-1.5 break-words rounded-md bg-red-50 px-2 py-1 font-mono text-xs text-negative">{t.result.error}</p>
+                  <>
+                    <p className="mt-1.5 break-words rounded-md bg-red-50 px-2 py-1 font-mono text-xs text-negative">{t.result.error}</p>
+                    {(() => {
+                      const { cause, fix } = explainFailure(key, t.result?.error);
+                      return (
+                        <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+                          <p><span className="font-semibold">Likely cause:</span> {cause}</p>
+                          <p className="mt-0.5"><span className="font-semibold">Try:</span> {fix}</p>
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
                 {t.status === 'pass' && t.result?.detail && (
                   <p className="mt-1.5 break-words rounded-md bg-emerald-50 px-2 py-1 font-mono text-[11px] text-emerald-700">{t.result.detail}</p>
