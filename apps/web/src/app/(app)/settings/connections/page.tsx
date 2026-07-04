@@ -43,9 +43,16 @@ function DiagnosticsPanel() {
     const started = Date.now();
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/`, { headers: { apikey: SUPABASE_ANON } });
-      return { ok: res.ok || res.status === 200, latencyMs: Date.now() - started, error: res.ok ? undefined : `HTTP ${res.status}` };
+      const latencyMs = Date.now() - started;
+      // Any HTTP response (including 401/404) means Supabase is reachable. A 401
+      // is the *expected* result — RLS deny-all correctly blocks anon browser
+      // access, so we treat it as a pass with an explanatory note.
+      if (res.status === 401 || res.status === 404) {
+        return { ok: true, latencyMs, detail: `Reachable · anon access blocked by RLS (HTTP ${res.status}, expected)` };
+      }
+      return { ok: res.ok, latencyMs, error: res.ok ? undefined : `HTTP ${res.status}` };
     } catch (e: any) {
-      return { ok: false, latencyMs: Date.now() - started, error: e?.message || 'Network error' };
+      return { ok: false, latencyMs: Date.now() - started, error: e?.message || 'Network error (unreachable)' };
     }
   };
 
