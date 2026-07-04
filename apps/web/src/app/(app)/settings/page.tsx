@@ -64,6 +64,8 @@ function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
+  const [ayrshare, setAyrshare] = useState<{ configured: boolean; connected: boolean; activeSocialAccounts: string[] } | null>(null);
+  const [ayrshareLoading, setAyrshareLoading] = useState(false);
 
   // Handle OAuth return — show success/error toast and clean the URL
   useEffect(() => {
@@ -88,10 +90,11 @@ function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [teamRes, networksRes, auditRes] = await Promise.all([
+        const [teamRes, networksRes, auditRes, ayrshareRes] = await Promise.all([
           api.getTeam(),
           api.getNetworks(),
           api.getAudit().catch(() => null), // viewer role may lack VIEW_AUDIT — not fatal
+          api.ayrshareStatus().catch(() => null),
         ]);
         if (cancelled) return;
         setTeam(teamRes ?? []);
@@ -102,6 +105,7 @@ function SettingsPage() {
             id: e.id, action: e.action, entity: e.entity, actor: e.userId ?? 'system', timestamp: e.createdAt,
           })));
         }
+        if (ayrshareRes) setAyrshare(ayrshareRes);
       } catch {
         if (cancelled) return;
         // Live API unreachable — fall back to demo data so the page still renders.
@@ -184,6 +188,33 @@ function SettingsPage() {
       const error = e?.message || 'Request failed';
       setNetTests((t) => ({ ...t, [type]: { status: 'fail', latencyMs, error, reason: explainNetworkFailure(error) } }));
     }
+  };
+
+  const connectAyrshare = async () => {
+    setAyrshareLoading(true);
+    try {
+      const { url } = await api.ayrshareLink();
+      window.open(url, '_blank', 'noopener,noreferrer,width=700,height=700');
+      // Poll for updated status after the user (hopefully) connects
+      setTimeout(async () => {
+        try {
+          const fresh = await api.ayrshareStatus();
+          setAyrshare(fresh);
+        } catch { /* ignore */ }
+        setAyrshareLoading(false);
+      }, 5000);
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not generate Ayrshare link');
+      setAyrshareLoading(false);
+    }
+  };
+
+  const refreshAyrshareStatus = async () => {
+    try {
+      const fresh = await api.ayrshareStatus();
+      setAyrshare(fresh);
+      toast.success('Ayrshare status refreshed');
+    } catch { /* ignore */ }
   };
 
   return (
@@ -272,6 +303,55 @@ function SettingsPage() {
                 </div>
               );
             })}
+          </div>
+        </Card>
+
+        {/* Ayrshare — multi-network social connect */}
+        <Card>
+          <CardHeader
+            title="Social accounts (Ayrshare)"
+            subtitle="Connect Facebook, Instagram, X, LinkedIn, TikTok and more through one hosted flow."
+          />
+          <div className="p-5">
+            {ayrshare === null ? (
+              <p className="text-sm text-slate-400">Loading…</p>
+            ) : !ayrshare.configured ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">Ayrshare not configured</p>
+                <p className="mt-1">Add <code className="rounded bg-amber-100 px-1">AYRSHARE_API_KEY</code> to your Railway environment variables to enable real social publishing.</p>
+                <p className="mt-2 text-xs text-amber-700">Get your API key at <span className="font-medium">app.ayrshare.com → API Key</span></p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {ayrshare.activeSocialAccounts.length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-slate-700">Connected networks</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ayrshare.activeSocialAccounts.map((n) => (
+                        <span key={n} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 capitalize">
+                          <span className="h-2 w-2 rounded-full bg-green-400" />
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No social accounts connected yet.</p>
+                )}
+                <div className="flex gap-2">
+                  <Button onClick={connectAyrshare} disabled={ayrshareLoading}>
+                    {ayrshareLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {ayrshare.connected ? 'Manage connected accounts' : 'Connect social accounts'}
+                  </Button>
+                  {ayrshare.connected && (
+                    <Button variant="secondary" onClick={refreshAyrshareStatus}>Refresh status</Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Clicking the button opens Ayrshare&apos;s secure hosted page where you authorise each network. Your tokens are stored in Ayrshare — never in this app.
+                </p>
+              </div>
+            )}
           </div>
         </Card>
 

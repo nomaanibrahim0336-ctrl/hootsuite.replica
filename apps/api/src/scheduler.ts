@@ -6,6 +6,7 @@
 // delayed jobs + exponential backoff — the publish logic is identical.
 
 import { prisma, mapPost, toJson } from './prisma';
+import * as ayrshare from './lib/ayrshare';
 
 const INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 15000;
 const MAX_ATTEMPTS = 3;
@@ -28,9 +29,39 @@ export async function setPublishingPaused(paused: boolean): Promise<void> {
 let timer: NodeJS.Timeout | null = null;
 let running = false; // guards against overlapping runs (interval + manual trigger)
 
-/** Simulate delivering a post to each social network. ~5% transient failure. */
-async function deliver(post: { id: string; networks: string[] }): Promise<void> {
-  if (Math.random() < 0.05) throw new Error('network timeout');
+/** Deliver a post via Ayrshare if configured, otherwise simulate delivery.
+ *  Falls back to simulation so the scheduler keeps working without an API key. */
+async function deliver(post: { id: string; content: string; networks: string[]; authorId?: string | null }): Promise<void> {
+  if (!ayrshare.isConfigured()) {
+    // Offline simulation — ~5% transient failure rate for realism
+    if (Math.random() < 0.05) throw new Error('network timeout (simulated)');
+    return;
+  }
+
+  // Look up the author's Ayrshare profile key
+  const profileKey = post.authorId
+    ? (await prisma.user.findUnique({ where: { id: post.authorId }, select: { ayrshareProfileKey: true } }))?.ayrshareProfileKey
+    : null;
+
+  if (!profileKey) {
+    // Author hasn't connected via Ayrshare — skip real delivery, mark as published anyway
+    console.log(`[scheduler] post ${post.id}: author has no Ayrshare profile, skipping real delivery`);
+    return;
+  }
+
+  // Map internal network names to Ayrshare platform identifiers
+  const PLATFORM_MAP: Record<string, string> = {
+    facebook: 'facebook',
+    instagram: 'instagram',
+    twitter: 'twitter',
+    linkedin: 'linkedin',
+    tiktok: 'tiktok',
+    youtube: 'youtube',
+  };
+  const platforms = post.networks.map((n) => PLATFORM_MAP[n] ?? n).filter(Boolean);
+  if (!platforms.length) return;
+
+  await ayrshare.publishPost(profileKey, post.content, platforms);
 }
 
 /** Publish every scheduled post whose time has come. Returns count published. */
@@ -60,7 +91,7 @@ async function runDuePosts(nowMs: number): Promise<number> {
     let ok = false;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS && !ok; attempt++) {
       try {
-        await deliver({ id: post.id, networks: post.networks });
+        await deliver({ id: post.id, content: post.content, networks: post.networks, authorId: row.authorId });
         ok = true;
       } catch {
         // Exponential backoff between attempts (skipped on the last try).

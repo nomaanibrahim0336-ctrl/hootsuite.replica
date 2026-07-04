@@ -252,6 +252,14 @@ export const api = {
   // Audit
   getAudit: () => request<any[]>('/audit'),
 
+  // Ayrshare social account integration
+  ayrshareStatus: () =>
+    request<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; profileKey?: string; error?: string }>('/ayrshare/status'),
+  ayrshareLink: () =>
+    request<{ url: string }>('/ayrshare/link', { method: 'POST' }),
+  ayrshareNetworks: () =>
+    request<string[]>('/ayrshare/networks'),
+
   // Advocacy (Amplify)
   getAdvocacyContent: () => request<any[]>('/advocacy/content'),
   getAdvocacyAnalytics: () => request<{ totalShares: number; totalReach: number; leaderboard: any[] }>('/advocacy/analytics'),
