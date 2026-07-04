@@ -2,24 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
-import { ArrowUpRight, ArrowDownRight, Clock, Activity, Gauge, Sparkles } from 'lucide-react';
-import { Card, CardHeader, PageHeader, NetworkChip, Badge, Avatar, Skeleton } from '@/components/ui';
-import { dashboardMetrics as mockMetrics, analyticsTrend as mockTrend, posts as mockPosts, networks as mockNetworks, activityStream, brandHealth, bestTimes } from '@/lib/mock';
+import { ArrowUpRight, ArrowDownRight, Clock, Activity, Gauge, Sparkles, Inbox } from 'lucide-react';
+import { Card, CardHeader, PageHeader, NetworkChip, Badge, Skeleton } from '@/components/ui';
 import { api } from '@/lib/api';
 import { toast } from '@/components/Toast';
-import { formatNumber, cn, NETWORK_META, SENTIMENT_META } from '@/lib/utils';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatNumber, cn, NETWORK_META } from '@/lib/utils';
+import type { AnalyticsMetric, AnalyticsPoint, Post, Network } from '@/lib/types';
+import { format } from 'date-fns';
 
 const RANGES = ['7 days', '30 days', '90 days'] as const;
-const kindLabel: Record<string, string> = { message: 'New message', mention: 'Mention', published: 'Published', approval: 'Approval' };
 
 export default function DashboardPage() {
   const [range, setRange] = useState<(typeof RANGES)[number]>('30 days');
   const [loading, setLoading] = useState(true);
-  const [dashboardMetrics, setDashboardMetrics] = useState<typeof mockMetrics>([]);
-  const [analyticsTrend, setAnalyticsTrend] = useState<typeof mockTrend>([]);
-  const [posts, setPosts] = useState<typeof mockPosts>([]);
-  const [networks, setNetworks] = useState<typeof mockNetworks>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [dashboardMetrics, setDashboardMetrics] = useState<AnalyticsMetric[]>([]);
+  const [analyticsTrend, setAnalyticsTrend] = useState<AnalyticsPoint[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [networks, setNetworks] = useState<Network[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,14 +35,11 @@ export default function DashboardPage() {
         setAnalyticsTrend(metricsRes?.trend ?? []);
         setPosts(postsRes ?? []);
         setNetworks(networksRes ?? []);
-      } catch {
+        setError(null);
+      } catch (e: any) {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the dashboard still renders.
-        setDashboardMetrics(mockMetrics);
-        setAnalyticsTrend(mockTrend);
-        setPosts(mockPosts);
-        setNetworks(mockNetworks);
-        toast.info('Showing demo data — live API unreachable.');
+        setError(e?.message || 'Could not reach the live API');
+        toast.error('Live API unreachable — try again in a moment.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,6 +51,10 @@ export default function DashboardPage() {
   const recent = posts.filter((p) => p.status === 'published').slice(0, 3);
   const days = range === '7 days' ? 7 : range === '90 days' ? 90 : 30;
   const trend = analyticsTrend.slice(-days);
+
+  // Derive best-times from post engagement (only when we have real data)
+  const bestTimes = derivBestTimes(posts);
+  const health = deriveBrandHealth(dashboardMetrics);
 
   return (
     <div>
@@ -69,6 +70,12 @@ export default function DashboardPage() {
         }
       />
 
+      {error && !loading && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span className="font-semibold">Live data unavailable:</span> {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
@@ -78,7 +85,11 @@ export default function DashboardPage() {
                 <Skeleton className="mt-3 h-4 w-28" />
               </Card>
             ))
-          : dashboardMetrics.map((m) => (
+          : dashboardMetrics.length === 0 ? (
+              <Card className="col-span-full p-8 text-center">
+                <p className="text-sm text-slate-500">No metrics yet. Connect an account and publish your first post to see numbers here.</p>
+              </Card>
+            ) : dashboardMetrics.map((m) => (
               <Card key={m.label} className="p-5">
                 <p className="text-sm text-slate-500">{m.label}</p>
                 <p className="mt-2 text-3xl font-bold text-slate-900">{formatNumber(m.value)}</p>
@@ -94,28 +105,34 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader title="Engagement over time" subtitle={`Last ${range}`} />
           <div className="h-72 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trend}>
-                <defs>
-                  <linearGradient id="eng" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#FFB81C" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#FFB81C" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={Math.floor(days / 6)} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
-                <Tooltip />
-                <Area type="monotone" dataKey="engagements" stroke="#FFB81C" strokeWidth={2} fill="url(#eng)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {trend.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">No engagement data yet.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend}>
+                  <defs>
+                    <linearGradient id="eng" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#FFB81C" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#FFB81C" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={Math.floor(days / 6)} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} tickFormatter={formatNumber} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="engagements" stroke="#FFB81C" strokeWidth={2} fill="url(#eng)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
 
         <Card>
           <CardHeader title="Connected accounts" />
           <div className="divide-y divide-slate-100">
-            {networks.map((n) => (
+            {networks.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">No networks connected. <a href="/settings" className="text-accent underline">Add one →</a></div>
+            ) : networks.map((n) => (
               <div key={n.id} className="flex items-center gap-3 px-5 py-3">
                 <NetworkChip type={n.type} />
                 <div className="flex-1">
@@ -129,28 +146,38 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Brand health · Best times · Activity */}
+      {/* Brand health · Best times · Activity — only when real data exists */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="p-5">
           <div className="flex items-center gap-2"><Gauge className="h-5 w-5 text-accent-deep" /><h3 className="font-semibold text-slate-800">Brand health</h3></div>
-          <div className="mt-4 flex items-end gap-3">
-            <p className="text-5xl font-bold text-slate-900">{brandHealth.score}</p>
-            <span className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-positive"><ArrowUpRight className="h-4 w-4" /> {brandHealth.delta}%</span>
-          </div>
-          <div className="mt-4 flex h-2.5 overflow-hidden rounded-full">
-            <span className="bg-positive" style={{ width: `${brandHealth.positive}%` }} />
-            <span className="bg-neutral" style={{ width: `${brandHealth.neutral}%` }} />
-            <span className="bg-negative" style={{ width: `${brandHealth.negative}%` }} />
-          </div>
-          <div className="mt-2 flex justify-between text-xs text-slate-400">
-            <span>{brandHealth.positive}% positive</span><span>{brandHealth.negative}% negative</span>
-          </div>
+          {health ? (
+            <>
+              <div className="mt-4 flex items-end gap-3">
+                <p className="text-5xl font-bold text-slate-900">{health.score}</p>
+                <span className={cn('mb-2 inline-flex items-center gap-1 text-sm font-medium', health.delta >= 0 ? 'text-positive' : 'text-negative')}>
+                  {health.delta >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />} {Math.abs(health.delta)}%
+                </span>
+              </div>
+              <div className="mt-4 flex h-2.5 overflow-hidden rounded-full">
+                <span className="bg-positive" style={{ width: `${health.positive}%` }} />
+                <span className="bg-neutral" style={{ width: `${health.neutral}%` }} />
+                <span className="bg-negative" style={{ width: `${health.negative}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-slate-400">
+                <span>{health.positive}% positive</span><span>{health.negative}% negative</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-8 text-center text-sm text-slate-400">Not enough data yet.</p>
+          )}
         </Card>
 
         <Card>
-          <CardHeader title="Best time to post" subtitle="AI recommendation" action={<Sparkles className="h-5 w-5 text-accent-deep" />} />
+          <CardHeader title="Best time to post" subtitle="Based on your posts" action={<Sparkles className="h-5 w-5 text-accent-deep" />} />
           <div className="space-y-2 p-4">
-            {bestTimes.map((b) => (
+            {bestTimes.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">Publish posts to see recommendations.</p>
+            ) : bestTimes.map((b) => (
               <div key={b.day} className="flex items-center gap-3">
                 <span className="w-8 text-sm font-medium text-slate-600">{b.day}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -163,22 +190,20 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Recent activity" subtitle="Messages, mentions & actions" action={<Activity className="h-5 w-5 text-accent-deep" />} />
+          <CardHeader title="Recent activity" subtitle="Latest published posts" action={<Activity className="h-5 w-5 text-accent-deep" />} />
           <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
-            {activityStream.map((a) => (
-              <div key={a.id} className="flex gap-3 px-5 py-3">
-                <div className="relative shrink-0">
-                  <Avatar name={a.actor} size={32} />
-                  <span className="absolute -bottom-1 -right-1"><NetworkChip type={a.network} size={15} /></span>
-                </div>
+            {recent.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-slate-400">
+                <Inbox className="h-8 w-8 text-slate-300" />
+                No activity yet.
+              </div>
+            ) : recent.map((p) => (
+              <div key={p.id} className="flex gap-3 px-5 py-3">
+                <div className="flex -space-x-1.5 pt-0.5">{p.networks.map((net) => <NetworkChip key={net} type={net} size={22} />)}</div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs">
-                    <span className="font-semibold text-slate-700">{a.actor}</span>
-                    <span className="text-slate-400"> · {kindLabel[a.kind]}</span>
-                  </p>
-                  <p className="line-clamp-1 text-sm text-slate-600">{a.text}</p>
+                  <p className="line-clamp-1 text-sm text-slate-700">{p.content}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Published {p.publishedAt && format(new Date(p.publishedAt), 'MMM d, h:mm a')}</p>
                 </div>
-                {a.sentiment && <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: SENTIMENT_META[a.sentiment].color }} />}
               </div>
             ))}
           </div>
@@ -190,7 +215,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Upcoming posts" subtitle={`${upcoming.length} scheduled`} />
           <div className="divide-y divide-slate-100">
-            {upcoming.map((p) => (
+            {upcoming.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">No scheduled posts.</div>
+            ) : upcoming.map((p) => (
               <div key={p.id} className="flex gap-3 px-5 py-3">
                 <div className="flex -space-x-1.5 pt-0.5">{p.networks.map((net) => <NetworkChip key={net} type={net} size={24} />)}</div>
                 <div className="flex-1">
@@ -205,7 +232,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Recent top posts" subtitle="By engagement" />
           <div className="divide-y divide-slate-100">
-            {recent.map((p) => (
+            {recent.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">No published posts yet.</div>
+            ) : recent.map((p) => (
               <div key={p.id} className="px-5 py-3">
                 <div className="flex items-center gap-2">
                   {p.networks.map((net) => <NetworkChip key={net} type={net} size={22} />)}
@@ -227,4 +256,42 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+/** Compute per-weekday engagement scores from published posts. */
+function derivBestTimes(posts: Post[]): { day: string; score: number; hour: string }[] {
+  const published = posts.filter((p) => p.status === 'published' && p.publishedAt && p.engagements);
+  if (published.length < 3) return [];
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const buckets: Record<number, { total: number; hours: number[] }> = {};
+  for (const p of published) {
+    const d = new Date(p.publishedAt!);
+    const dow = d.getDay();
+    const eng = (p.engagements!.likes + p.engagements!.comments + p.engagements!.shares) || 0;
+    if (!buckets[dow]) buckets[dow] = { total: 0, hours: [] };
+    buckets[dow].total += eng;
+    buckets[dow].hours.push(d.getHours());
+  }
+  const max = Math.max(...Object.values(buckets).map((b) => b.total), 1);
+  return Object.entries(buckets)
+    .map(([dow, b]) => {
+      const avgHour = Math.round(b.hours.reduce((s, h) => s + h, 0) / b.hours.length);
+      const h12 = avgHour % 12 || 12;
+      const ampm = avgHour < 12 ? 'AM' : 'PM';
+      return { day: DAYS[+dow], score: Math.round((b.total / max) * 100), hour: `${h12}:00 ${ampm}` };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+}
+
+/** Derive a simple brand-health snapshot from engagement metrics. */
+function deriveBrandHealth(metrics: AnalyticsMetric[]): { score: number; delta: number; positive: number; neutral: number; negative: number } | null {
+  if (metrics.length === 0) return null;
+  const engagement = metrics.find((m) => /engag/i.test(m.label));
+  const followers = metrics.find((m) => /follow/i.test(m.label));
+  const base = engagement ?? followers ?? metrics[0];
+  const delta = base.changeType === 'increase' ? base.change : -base.change;
+  // Placeholder split until real sentiment data lands
+  const score = Math.max(0, Math.min(100, 60 + Math.round(delta)));
+  return { score, delta, positive: score, neutral: Math.max(0, Math.round((100 - score) * 0.6)), negative: Math.max(0, 100 - score - Math.round((100 - score) * 0.6)) };
 }

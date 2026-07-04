@@ -5,7 +5,6 @@ import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Skeleton } fr
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toast } from '@/components/Toast';
-import { posts as seedPosts } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { useUiStore } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
@@ -38,9 +37,7 @@ export default function PublisherPage() {
         if (!cancelled) setList(res ?? []);
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the page still renders.
-        setList(seedPosts);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — could not load posts.');
       } finally {
         if (!cancelled) setLoading(false);
       }

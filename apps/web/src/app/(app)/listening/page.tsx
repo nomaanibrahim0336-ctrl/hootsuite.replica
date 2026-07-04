@@ -12,19 +12,18 @@ import {
   Legend,
 } from 'recharts';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
-import { streams as seedStreams, mentions as seedMentions, sentimentTrend as seedSentimentTrend } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { toast } from '@/components/Toast';
 import { cn, formatNumber, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
-import type { Stream, NetworkType } from '@/lib/types';
+import type { Stream, NetworkType, Mention, SentimentPoint } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { Plus, Radio, Heart, Repeat2, MessageCircle } from 'lucide-react';
 
 export default function ListeningPage() {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [active, setActive] = useState<string | undefined>(undefined);
-  const [feed, setFeed] = useState<typeof seedMentions>([]);
-  const [sentimentTrend, setSentimentTrend] = useState<typeof seedSentimentTrend>([]);
+  const [feed, setFeed] = useState<Mention[]>([]);
+  const [sentimentTrend, setSentimentTrend] = useState<SentimentPoint[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [keywords, setKeywords] = useState('');
@@ -45,12 +44,7 @@ export default function ListeningPage() {
         setSentimentTrend(sentimentRes?.trend ?? []);
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the page still renders.
-        setStreams(seedStreams);
-        setActive(seedStreams[0]?.id);
-        setFeed(seedMentions);
-        setSentimentTrend(seedSentimentTrend);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — no streams or mentions loaded.');
       }
     })();
     return () => { cancelled = true; };

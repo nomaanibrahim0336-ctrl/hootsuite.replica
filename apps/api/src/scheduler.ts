@@ -7,6 +7,7 @@
 
 import { prisma, mapPost, toJson } from './prisma';
 import * as ayrshare from './lib/ayrshare';
+import * as zernio from './lib/zernio';
 
 const INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 15000;
 const MAX_ATTEMPTS = 3;
@@ -29,16 +30,9 @@ export async function setPublishingPaused(paused: boolean): Promise<void> {
 let timer: NodeJS.Timeout | null = null;
 let running = false; // guards against overlapping runs (interval + manual trigger)
 
-/** Deliver a post via Ayrshare if configured, otherwise simulate delivery.
- *  Falls back to simulation so the scheduler keeps working without an API key. */
+/** Deliver a post via the configured provider (Ayrshare > Zernio). If no
+ *  provider is configured, simulate delivery so the scheduler still runs. */
 async function deliver(post: { id: string; content: string; networks: string[]; authorId?: string | null }): Promise<void> {
-  if (!ayrshare.isConfigured()) {
-    // Offline simulation — ~5% transient failure rate for realism
-    if (Math.random() < 0.05) throw new Error('network timeout (simulated)');
-    return;
-  }
-
-  // Map internal network names to Ayrshare platform identifiers
   const PLATFORM_MAP: Record<string, string> = {
     facebook: 'facebook',
     instagram: 'instagram',
@@ -50,7 +44,17 @@ async function deliver(post: { id: string; content: string; networks: string[]; 
   const platforms = post.networks.map((n) => PLATFORM_MAP[n] ?? n).filter(Boolean);
   if (!platforms.length) return;
 
-  await ayrshare.publishPost(post.content, platforms);
+  if (ayrshare.isConfigured()) {
+    await ayrshare.publishPost(post.content, platforms);
+    return;
+  }
+  if (zernio.isConfigured()) {
+    await zernio.publish(post.content, platforms);
+    return;
+  }
+
+  // No provider configured — simulate with ~5% failure rate
+  if (Math.random() < 0.05) throw new Error('network timeout (simulated)');
 }
 
 /** Publish every scheduled post whose time has come. Returns count published. */

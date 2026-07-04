@@ -16,13 +16,20 @@ import {
 } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, FileText, Download } from 'lucide-react';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/components/ui';
-import { analyticsMetrics as seedMetrics, analyticsTrend as seedTrend, networkBreakdown as seedBreakdown, reports as seedReports, reportTemplates } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { formatNumber, cn, NETWORK_META } from '@/lib/utils';
+import type { AnalyticsMetric, AnalyticsPoint, NetworkBreakdown, Report } from '@/lib/types';
 import { format } from 'date-fns';
 import { toast } from '@/components/Toast';
 
-function downloadCsv(name: string, metrics: typeof seedMetrics) {
+const REPORT_TEMPLATES = [
+  { id: 't-perf', name: 'Performance report', desc: 'Impressions, engagements, clicks across all networks.' },
+  { id: 't-audience', name: 'Audience growth', desc: 'Follower and reach trends per network.' },
+  { id: 't-content', name: 'Top content', desc: 'Best-performing posts by engagement rate.' },
+  { id: 't-competitor', name: 'Competitor benchmark', desc: 'Share of voice vs top competitors.' },
+];
+
+function downloadCsv(name: string, metrics: AnalyticsMetric[]) {
   const header = 'Metric,Value,Change\n';
   const rows = metrics.map((m) => `${m.label},${m.value},${m.change}%`).join('\n');
   const blob = new Blob([`Report,${name}\n\n${header}${rows}\n`], { type: 'text/csv' });
@@ -36,10 +43,11 @@ function downloadCsv(name: string, metrics: typeof seedMetrics) {
 }
 
 export default function AnalyticsPage() {
-  const [analyticsMetrics, setAnalyticsMetrics] = useState<typeof seedMetrics>([]);
-  const [analyticsTrend, setAnalyticsTrend] = useState<typeof seedTrend>([]);
-  const [networkBreakdown, setNetworkBreakdown] = useState<typeof seedBreakdown>([]);
-  const [reports, setReports] = useState<typeof seedReports>([]);
+  const [analyticsMetrics, setAnalyticsMetrics] = useState<AnalyticsMetric[]>([]);
+  const [analyticsTrend, setAnalyticsTrend] = useState<AnalyticsPoint[]>([]);
+  const [networkBreakdown, setNetworkBreakdown] = useState<NetworkBreakdown[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,14 +59,11 @@ export default function AnalyticsPage() {
         setAnalyticsTrend(metricsRes?.trend ?? []);
         setNetworkBreakdown(metricsRes?.networkBreakdown ?? []);
         setReports(reportsRes ?? []);
-      } catch {
+        setError(null);
+      } catch (e: any) {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the page still renders.
-        setAnalyticsMetrics(seedMetrics);
-        setAnalyticsTrend(seedTrend);
-        setNetworkBreakdown(seedBreakdown);
-        setReports(seedReports);
-        toast.info('Showing demo data — live API unreachable.');
+        setError(e?.message || 'Could not reach the live API');
+        toast.error('Live API unreachable.');
       }
     })();
     return () => { cancelled = true; };
@@ -80,6 +85,16 @@ export default function AnalyticsPage() {
         subtitle="Measure performance and prove ROI across every network."
         action={<Button variant="secondary" onClick={() => downloadCsv('Analytics Overview', analyticsMetrics)}><Download className="h-4 w-4" /> Export</Button>}
       />
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span className="font-semibold">Live data unavailable:</span> {error}
+        </div>
+      )}
+
+      {analyticsMetrics.length === 0 && !error && (
+        <Card className="p-8 text-center text-sm text-slate-500">No analytics data yet. Connect an account and publish posts to see metrics here.</Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {analyticsMetrics.map((m) => (
@@ -163,7 +178,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader title="Report templates" subtitle="Start from a pre-built template" />
           <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
-            {reportTemplates.map((t) => (
+            {REPORT_TEMPLATES.map((t) => (
               <button key={t.id} className="rounded-xl border border-slate-200 p-4 text-left transition hover:border-accent hover:shadow-sm">
                 <p className="text-sm font-semibold text-slate-800">{t.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{t.desc}</p>

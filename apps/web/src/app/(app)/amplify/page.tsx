@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, PageHeader, Button, Badge, Avatar } from '@/components/ui';
-import { advocacyContent as seedContent, advocacyLeaderboard as seedLeaderboard, advocacyStats as seedStats } from '@/lib/mock';
 import { api } from '@/lib/api';
+import type { AdvocacyContent, AdvocacyLeader } from '@/lib/types';
 import { formatNumber, cn } from '@/lib/utils';
 import { toast } from '@/components/Toast';
 import { Megaphone, Share2, Trophy, Users, TrendingUp, Medal } from 'lucide-react';
 
 export default function AmplifyPage() {
   const [shared, setShared] = useState<Record<string, boolean>>({});
-  const [advocacyContent, setAdvocacyContent] = useState<typeof seedContent>([]);
-  const [advocacyLeaderboard, setAdvocacyLeaderboard] = useState<typeof seedLeaderboard>([]);
+  const [advocacyContent, setAdvocacyContent] = useState<AdvocacyContent[]>([]);
+  const [advocacyLeaderboard, setAdvocacyLeaderboard] = useState<AdvocacyLeader[]>([]);
   const [advocacyStats, setAdvocacyStats] = useState({ totalShares: 0, totalReach: 0, activeAdvocates: 0 });
 
   useEffect(() => {
@@ -29,11 +29,7 @@ export default function AmplifyPage() {
         });
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the page still renders.
-        setAdvocacyContent(seedContent);
-        setAdvocacyLeaderboard(seedLeaderboard);
-        setAdvocacyStats(seedStats);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — advocacy hub is empty.');
       }
     })();
     return () => { cancelled = true; };

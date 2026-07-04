@@ -3,10 +3,9 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
-import { networks as seedNetworks, team as seedTeam, currentUser, auditLog as seedAuditLog } from '@/lib/mock';
 import { api, API_BASE } from '@/lib/api';
 import { NETWORK_META, formatNumber } from '@/lib/utils';
-import type { Network, TeamMember, UserRole, NetworkType } from '@/lib/types';
+import type { Network, TeamMember, UserRole, NetworkType, AuditEntry } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Plus, ScrollText, Plug, ChevronRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -57,14 +56,16 @@ function SettingsPage() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [networksLoaded, setNetworksLoaded] = useState(false);
   const [netTests, setNetTests] = useState<Record<string, NetTestState>>({});
-  const [name, setName] = useState(currentUser.name);
-  const [email, setEmail] = useState(currentUser.email);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [team, setTeam] = useState<TeamMember[]>([]);
-  const [auditLog, setAuditLog] = useState<typeof seedAuditLog>([]);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [ayrshare, setAyrshare] = useState<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; error?: string } | null>(null);
+  const [zernio, setZernio] = useState<{ configured: boolean; accounts: { platform: string; handle: string; connected: boolean; followers?: number }[]; error?: string } | null>(null);
+  const [zernioConnecting, setZernioConnecting] = useState<string | null>(null);
 
   // Handle OAuth return — show success/error toast and clean the URL
   useEffect(() => {
@@ -89,13 +90,16 @@ function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [teamRes, networksRes, auditRes, ayrshareRes] = await Promise.all([
-          api.getTeam(),
-          api.getNetworks(),
-          api.getAudit().catch(() => null), // viewer role may lack VIEW_AUDIT — not fatal
+        const [meRes, teamRes, networksRes, auditRes, ayrshareRes, zernioRes] = await Promise.all([
+          api.getMe().catch(() => null),
+          api.getTeam().catch(() => []),
+          api.getNetworks().catch(() => []),
+          api.getAudit().catch(() => null),
           api.ayrshareStatus().catch(() => null),
+          api.zernioStatus().catch(() => null),
         ]);
         if (cancelled) return;
+        if (meRes) { setName(meRes.name || ''); setEmail(meRes.email || ''); }
         setTeam(teamRes ?? []);
         setNetworks(networksRes ?? []);
         setNetworksLoaded(true);
@@ -105,14 +109,11 @@ function SettingsPage() {
           })));
         }
         if (ayrshareRes) setAyrshare(ayrshareRes);
+        if (zernioRes) setZernio(zernioRes);
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the page still renders.
-        setTeam(seedTeam);
-        setNetworks(seedNetworks);
         setNetworksLoaded(true);
-        setAuditLog(seedAuditLog);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — some data may be missing.');
       }
     })();
     return () => { cancelled = true; };
@@ -198,6 +199,44 @@ function SettingsPage() {
       const fresh = await api.ayrshareStatus();
       setAyrshare(fresh);
       toast.success('Status refreshed');
+    } catch { /* ignore */ }
+  };
+
+  const connectZernio = async (platform: string) => {
+    setZernioConnecting(platform);
+    try {
+      const returnTo = window.location.href.split('?')[0];
+      const { url } = await api.zernioConnect(platform, returnTo);
+      window.open(url, '_blank', 'noopener,noreferrer,width=700,height=800');
+      setTimeout(async () => {
+        try {
+          const fresh = await api.zernioStatus();
+          setZernio(fresh);
+        } catch { /* ignore */ }
+        setZernioConnecting(null);
+      }, 5000);
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not start Zernio connect flow');
+      setZernioConnecting(null);
+    }
+  };
+
+  const disconnectZernio = async (platform: string) => {
+    try {
+      await api.zernioDisconnect(platform);
+      toast.success(`Disconnected ${platform}`);
+      const fresh = await api.zernioStatus();
+      setZernio(fresh);
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not disconnect');
+    }
+  };
+
+  const refreshZernioStatus = async () => {
+    try {
+      const fresh = await api.zernioStatus();
+      setZernio(fresh);
+      toast.success('Zernio status refreshed');
     } catch { /* ignore */ }
   };
 
@@ -334,6 +373,56 @@ function SettingsPage() {
                 <p className="text-xs text-slate-400">
                   Connect your social accounts once at <span className="font-medium">app.ayrshare.com</span> → Social Accounts. Once connected, this app publishes through Ayrshare automatically.
                 </p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Zernio — direct social platform connections */}
+        <Card>
+          <CardHeader
+            title="Direct connections (Zernio)"
+            subtitle="Connect each social platform directly through Zernio — bypasses hosted flows for a lower-latency posting path."
+          />
+          <div className="p-5">
+            {zernio === null ? (
+              <p className="text-sm text-slate-400">Loading…</p>
+            ) : !zernio.configured ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">Zernio not configured</p>
+                <p className="mt-1">Add <code className="rounded bg-amber-100 px-1">ZERNIO_API_KEY</code> to your Railway environment variables (optionally <code className="rounded bg-amber-100 px-1">ZERNIO_API_URL</code> if using a custom endpoint).</p>
+                <p className="mt-2 text-xs text-amber-700">Once configured, per-platform connect buttons appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {zernio.error && (
+                  <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{zernio.error}</p>
+                )}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {SUPPORTED_NETWORKS.map((platform) => {
+                    const acc = zernio.accounts.find((a) => a.platform === platform);
+                    const isConnecting = zernioConnecting === platform;
+                    return (
+                      <div key={platform} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                        <NetworkChip type={platform} size={32} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-800">{NETWORK_META[platform].label}</p>
+                          <p className="text-xs text-slate-400">
+                            {acc?.connected ? `${acc.handle}${acc.followers ? ` · ${formatNumber(acc.followers)} followers` : ''}` : 'Not connected'}
+                          </p>
+                        </div>
+                        {acc?.connected ? (
+                          <Button variant="secondary" size="sm" onClick={() => disconnectZernio(platform)}>Disconnect</Button>
+                        ) : (
+                          <Button size="sm" disabled={isConnecting} onClick={() => connectZernio(platform)}>
+                            {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Connect'}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button variant="secondary" onClick={refreshZernioStatus}>Refresh status</Button>
               </div>
             )}
           </div>

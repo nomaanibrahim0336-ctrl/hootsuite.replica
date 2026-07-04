@@ -149,6 +149,7 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
 
 export const api = {
   // Auth
+  getMe: () => request<{ id: string; email: string; name: string; role: string; createdAt: string }>('/auth/me'),
   register: (email: string, password: string, name: string) =>
     request<{ user: any; accessToken: string; refreshToken: string }>('/auth/register', {
       method: 'POST',
@@ -257,6 +258,14 @@ export const api = {
     request<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; dashboardUrl?: string; error?: string }>('/ayrshare/status'),
   ayrshareNetworks: () =>
     request<string[]>('/ayrshare/networks'),
+
+  // Zernio — direct social platform connections
+  zernioStatus: () =>
+    request<{ configured: boolean; accounts: { platform: string; handle: string; connected: boolean; followers?: number }[]; error?: string }>('/zernio/status'),
+  zernioConnect: (platform: string, returnTo: string) =>
+    request<{ url: string }>('/zernio/connect', { method: 'POST', body: JSON.stringify({ platform, returnTo }) }),
+  zernioDisconnect: (platform: string) =>
+    request<null>(`/zernio/accounts/${platform}`, { method: 'DELETE' }),
 
   // Advocacy (Amplify)
   getAdvocacyContent: () => request<any[]>('/advocacy/content'),

@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react';
 import { Card, PageHeader, Badge, NetworkChip, Avatar, Button } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/Toast';
-import { messages as seed, savedReplies as seedSavedReplies } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
-import type { Message, MessageStatus } from '@/lib/types';
+import type { Message, MessageStatus, SavedReply } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2 } from 'lucide-react';
 
@@ -15,7 +14,7 @@ const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolv
 
 export default function InboxPage() {
   const [list, setList] = useState<Message[]>([]);
-  const [savedReplies, setSavedReplies] = useState<typeof seedSavedReplies>([]);
+  const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
   const [filter, setFilter] = useState<(typeof filters)[number]>('all');
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [reply, setReply] = useState('');
@@ -33,11 +32,7 @@ export default function InboxPage() {
         setSavedReplies(repliesRes ?? []);
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the inbox still renders.
-        setList(seed);
-        setActiveId(seed[0]?.id);
-        setSavedReplies(seedSavedReplies);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — no messages loaded.');
       }
     })();
     return () => { cancelled = true; };
@@ -198,16 +193,13 @@ export default function InboxPage() {
               </div>
             </div>
             <div className="space-y-3 px-5 py-4 text-sm">
-              <div className="flex justify-between"><span className="text-slate-400">Customer since</span><span className="font-medium text-slate-700">Mar 2025</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Conversations</span><span className="font-medium text-slate-700">{active.thread.length + 3}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Replies in thread</span><span className="font-medium text-slate-700">{active.thread.length}</span></div>
               <div className="flex justify-between"><span className="text-slate-400">Sentiment</span><span className="font-medium" style={{ color: SENTIMENT_META[active.sentiment].color }}>{SENTIMENT_META[active.sentiment].label}</span></div>
-              <div className="flex items-center gap-2 text-xs text-slate-400"><Clock className="h-3.5 w-3.5" /> Last seen {formatDistanceToNow(new Date(active.timestamp), { addSuffix: true })}</div>
+              <div className="flex items-center gap-2 text-xs text-slate-400"><Clock className="h-3.5 w-3.5" /> Received {formatDistanceToNow(new Date(active.timestamp), { addSuffix: true })}</div>
             </div>
             <div className="border-t border-slate-100 px-5 py-4">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Tag className="h-3.5 w-3.5" /> Tags</p>
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Tag className="h-3.5 w-3.5" /> Type</p>
               <div className="flex flex-wrap gap-1.5">
-                <Badge color="purple">VIP</Badge>
-                <Badge>Returning</Badge>
                 <Badge color="blue">{active.type}</Badge>
               </div>
             </div>

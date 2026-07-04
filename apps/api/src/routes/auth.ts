@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma';
-import { signTokens, verifyRefresh, signResetToken, verifyResetToken } from '../auth';
+import { signTokens, verifyRefresh, signResetToken, verifyResetToken, requireAuth, AuthedRequest } from '../auth';
 import { validateBody, rules } from '../validate';
 
 const router = Router();
@@ -28,21 +28,24 @@ router.post(
 
 router.post(
   '/login',
-  validateBody({ email: { type: 'string', required: true, pattern: rules.EMAIL } }),
+  validateBody({
+    email: { type: 'string', required: true, pattern: rules.EMAIL },
+    password: { type: 'string', required: true, minLength: 1 },
+  }),
   async (req, res) => {
-  const { email, password } = req.body ?? {};
-  // `email` is guaranteed present by validateBody, so findUnique is safe.
-  let user = await prisma.user.findUnique({ where: { email } });
-  // Demo convenience: unknown email creates a session user.
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email, name: 'Demo User', passwordHash: '', role: 'owner' },
-    });
-    return res.json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
-  }
-  const ok = user.passwordHash ? await bcrypt.compare(password ?? '', user.passwordHash) : true;
-  if (!ok) return res.status(401).json({ success: false, error: 'Invalid credentials' });
-  res.json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
+    const { email, password } = req.body ?? {};
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.passwordHash) return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    res.json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
+  },
+);
+
+router.get('/me', requireAuth, async (req: AuthedRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  res.json({ success: true, data: publicUser(user) });
 });
 
 router.post('/refresh', (req, res) => {

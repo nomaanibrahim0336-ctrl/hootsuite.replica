@@ -7,7 +7,6 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Card, PageHeader, Button, NetworkChip } from '@/components/ui';
-import { posts as seedPosts } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { useUiStore } from '@/lib/ui-store';
 import { toast } from '@/components/Toast';
@@ -29,9 +28,7 @@ export default function CalendarPage() {
         if (!cancelled) setList(res ?? []);
       } catch {
         if (cancelled) return;
-        // Live API unreachable — fall back to demo data so the planner still renders.
-        setList(seedPosts);
-        toast.info('Showing demo data — live API unreachable.');
+        toast.error('Live API unreachable — no scheduled posts to show.');
       }
     })();
     return () => { cancelled = true; };

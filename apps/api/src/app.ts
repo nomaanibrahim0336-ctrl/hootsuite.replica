@@ -17,6 +17,7 @@ import advocacyRoutes from './routes/advocacy';
 import auditRoutes from './routes/audit';
 import oauthRoutes from './routes/oauth';
 import ayrshareRoutes from './routes/ayrshare';
+import zernioRoutes from './routes/zernio';
 
 export function createApp() {
   const app = express();
@@ -105,6 +106,7 @@ export function createApp() {
   app.use('/api/advocacy', requireAuth, advocacyRoutes);
   app.use('/api/audit', requireAuth, auditRoutes);
   app.use('/api/ayrshare', requireAuth, ayrshareRoutes);
+  app.use('/api/zernio', requireAuth, zernioRoutes);
 
   app.use((_req, res) => res.status(404).json({ success: false, error: 'Not found' }));
 

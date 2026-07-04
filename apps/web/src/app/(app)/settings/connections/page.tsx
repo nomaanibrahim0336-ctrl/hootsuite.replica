@@ -6,7 +6,7 @@ import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/comp
 import { toast } from '@/components/Toast';
 import { NETWORK_META, cn } from '@/lib/utils';
 import type { NetworkType } from '@/lib/types';
-import { diagnostics, API_BASE, type DiagResult } from '@/lib/api';
+import { diagnostics, API_BASE, api, type DiagResult } from '@/lib/api';
 import { Database, Server, Sparkles, Plug, CheckCircle2, XCircle, ExternalLink, ShieldCheck, Cloud, Loader2, PlayCircle } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -177,8 +177,8 @@ function DiagnosticsPanel() {
 export default function ConnectionsPage() {
   const [apiHealth, setApiHealth] = useState<Health>('checking');
   const [supaHealth, setSupaHealth] = useState<Health>('checking');
-  const [connected, setConnected] = useState<Record<string, boolean>>({
-    facebook: true, instagram: true, twitter: true, linkedin: true, tiktok: false,
+  const [socialStatus, setSocialStatus] = useState<Record<NetworkType, { connected: boolean; via?: 'ayrshare' | 'zernio' | 'direct' }>>({
+    facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false }, tiktok: { connected: false },
   });
 
   useEffect(() => {
@@ -195,15 +195,30 @@ export default function ConnectionsPage() {
     };
     ping(`${API_URL}/health`, {}, setApiHealth);
     ping(`${SUPABASE_URL}/rest/v1/`, { headers: { apikey: SUPABASE_ANON } }, setSupaHealth);
-  }, []);
 
-  const toggleSocial = (n: NetworkType) => {
-    setConnected((c) => {
-      const next = !c[n];
-      toast[next ? 'success' : 'info'](`${NETWORK_META[n].label} ${next ? 'connected' : 'disconnected'}`);
-      return { ...c, [n]: next };
-    });
-  };
+    // Fetch real connection status across all three providers
+    (async () => {
+      const [networksRes, ayrshareRes, zernioRes] = await Promise.all([
+        api.getNetworks().catch(() => []),
+        api.ayrshareStatus().catch(() => null),
+        api.zernioStatus().catch(() => null),
+      ]);
+      const next: Record<NetworkType, { connected: boolean; via?: 'ayrshare' | 'zernio' | 'direct' }> = {
+        facebook: { connected: false }, instagram: { connected: false }, twitter: { connected: false }, linkedin: { connected: false }, tiktok: { connected: false },
+      };
+      for (const n of networksRes ?? []) {
+        if (n.connected && next[n.type as NetworkType]) next[n.type as NetworkType] = { connected: true, via: 'direct' };
+      }
+      for (const p of ayrshareRes?.activeSocialAccounts ?? []) {
+        const key = p.toLowerCase() as NetworkType;
+        if (next[key]) next[key] = { connected: true, via: 'ayrshare' };
+      }
+      for (const a of zernioRes?.accounts ?? []) {
+        if (a.connected && next[a.platform as NetworkType]) next[a.platform as NetworkType] = { connected: true, via: 'zernio' };
+      }
+      setSocialStatus(next);
+    })();
+  }, []);
 
   const label: Record<Health, string> = { checking: 'Checking…', online: 'Connected', offline: 'Offline' };
 
@@ -263,34 +278,38 @@ export default function ConnectionsPage() {
           </div>
         </Card>
 
-        {/* Social networks */}
+        {/* Social networks — read-only summary; use Settings to change */}
         <Card>
-          <CardHeader title="Social networks" subtitle="Connect accounts via OAuth to publish and monitor" action={<Plug className="h-5 w-5 text-accent-deep" />} />
+          <CardHeader
+            title="Social networks"
+            subtitle="Live status across all providers (Ayrshare, Zernio, direct OAuth)"
+            action={<Plug className="h-5 w-5 text-accent-deep" />}
+          />
           <div className="divide-y divide-slate-100">
-            {socials.map((n) => (
-              <div key={n} className="flex items-center gap-4 px-5 py-4">
-                <NetworkChip type={n} size={38} />
-                <div className="flex-1">
-                  <p className="font-medium text-slate-800">{NETWORK_META[n].label}</p>
-                  <p className="text-xs text-slate-400">{connected[n] ? 'OAuth token active' : 'Not connected'}</p>
-                </div>
-                {connected[n] ? (
-                  <>
-                    <span className="flex items-center gap-1 text-xs font-medium text-positive"><CheckCircle2 className="h-4 w-4" /> connected</span>
-                    <Button variant="secondary" size="sm" onClick={() => toggleSocial(n)}>Disconnect</Button>
-                  </>
-                ) : (
-                  <>
+            {socials.map((n) => {
+              const s = socialStatus[n];
+              return (
+                <div key={n} className="flex items-center gap-4 px-5 py-4">
+                  <NetworkChip type={n} size={38} />
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-800">{NETWORK_META[n].label}</p>
+                    <p className="text-xs text-slate-400">
+                      {s.connected ? `Connected via ${s.via}` : 'Not connected'}
+                    </p>
+                  </div>
+                  {s.connected ? (
+                    <span className="flex items-center gap-1 text-xs font-medium text-positive"><CheckCircle2 className="h-4 w-4" /> {s.via}</span>
+                  ) : (
                     <span className="flex items-center gap-1 text-xs text-slate-400"><XCircle className="h-4 w-4" /> not connected</span>
-                    <Button size="sm" onClick={() => toggleSocial(n)}>Connect</Button>
-                  </>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
-            🔒 Production OAuth requires each network&apos;s app credentials (client ID/secret) configured server-side in <code>apps/api/.env</code>.
-          </p>
+          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
+            <span>Manage connections in Settings → Connected accounts, Ayrshare, or Zernio.</span>
+            <Link href="/settings" className="font-medium text-accent-deep hover:underline">Open Settings →</Link>
+          </div>
         </Card>
 
         {/* AI providers */}
