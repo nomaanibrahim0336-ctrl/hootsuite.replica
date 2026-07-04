@@ -148,6 +148,9 @@ export const api = {
   approvePost: (id: string) => request(`/posts/${id}/approve`, { method: 'POST' }),
   rejectPost: (id: string) => request(`/posts/${id}/reject`, { method: 'POST' }),
   getCalendar: () => request<any[]>('/posts/calendar'),
+  getPublishingStatus: () => request<{ paused: boolean }>('/posts/publishing-status'),
+  pausePublishing: () => request<{ paused: boolean }>('/posts/pause-publishing', { method: 'POST' }),
+  resumePublishing: () => request<{ paused: boolean }>('/posts/resume-publishing', { method: 'POST' }),
 
   // Inbox
   getInbox: (status?: string) => request<any[]>(`/inbox${status ? `?status=${status}` : ''}`),

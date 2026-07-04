@@ -1,12 +1,42 @@
 'use client';
 
-import { Search, Bell, Plus, Sun, Moon, Menu } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Search, Bell, Plus, Sun, Moon, Menu, PauseCircle, PlayCircle } from 'lucide-react';
 import { Avatar } from './ui';
 import { currentUser } from '@/lib/mock';
 import { useUiStore } from '@/lib/ui-store';
+import { api } from '@/lib/api';
+import { toast } from './Toast';
+import { cn } from '@/lib/utils';
 
 export function Topbar() {
   const { theme, toggleTheme, openComposer, setPalette, setMobileNav } = useUiStore();
+  const [paused, setPaused] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.getPublishingStatus()
+      .then((s) => setPaused(s.paused))
+      .catch(() => {
+        // API unreachable — assume publishing is active.
+      });
+  }, []);
+
+  const togglePause = async () => {
+    setBusy(true);
+    const next = !paused;
+    try {
+      const res = next ? await api.pausePublishing() : await api.resumePublishing();
+      setPaused(res.paused);
+      toast[next ? 'info' : 'success'](
+        next ? '⏸ Publishing paused — all scheduled posts are on hold.' : '▶ Publishing resumed.'
+      );
+    } catch {
+      toast.error('Could not change publishing state — API unreachable');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-slate-200 bg-surface/80 px-4 backdrop-blur sm:px-6">
@@ -29,6 +59,23 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
+        {paused && (
+          <span className="hidden items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-negative sm:inline-flex">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-negative" /> Publishing paused
+          </span>
+        )}
+        <button
+          onClick={togglePause}
+          disabled={busy}
+          title={paused ? 'Resume publishing' : 'Pause all scheduled publishing (crisis mode)'}
+          aria-label={paused ? 'Resume publishing' : 'Pause publishing'}
+          className={cn(
+            'rounded-lg p-2 transition-colors hover:bg-slate-100 disabled:opacity-50',
+            paused ? 'text-negative' : 'text-slate-500'
+          )}
+        >
+          {paused ? <PlayCircle className="h-5 w-5" /> : <PauseCircle className="h-5 w-5" />}
+        </button>
         <button
           onClick={openComposer}
           className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-ink transition-transform hover:bg-accent-hover active:scale-95 sm:px-4"

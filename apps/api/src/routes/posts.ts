@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma, mapPost, toJson } from '../prisma';
-import { publishDuePosts } from '../scheduler';
+import { publishDuePosts, isPublishingPaused, setPublishingPaused } from '../scheduler';
 import { requirePermission, PERMISSIONS } from '../rbac';
 import { logAudit } from '../audit';
 import { AuthedRequest } from '../auth';
@@ -12,6 +12,23 @@ const router = Router();
 router.post('/run-scheduler', async (_req, res) => {
   const published = await publishDuePosts();
   res.json({ success: true, data: { published } });
+});
+
+// Crisis mode — pause/resume all automated publishing without touching post data.
+router.get('/publishing-status', async (_req, res) => {
+  res.json({ success: true, data: { paused: await isPublishingPaused() } });
+});
+
+router.post('/pause-publishing', async (req: AuthedRequest, res) => {
+  await setPublishingPaused(true);
+  await logAudit(req.userId, 'pause', 'publishing');
+  res.json({ success: true, data: { paused: true } });
+});
+
+router.post('/resume-publishing', async (req: AuthedRequest, res) => {
+  await setPublishingPaused(false);
+  await logAudit(req.userId, 'resume', 'publishing');
+  res.json({ success: true, data: { paused: false } });
 });
 
 router.get('/', async (req, res) => {

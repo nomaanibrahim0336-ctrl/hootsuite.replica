@@ -9,6 +9,21 @@ import { prisma, mapPost, toJson } from './prisma';
 
 const INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 15000;
 const MAX_ATTEMPTS = 3;
+const PAUSE_KEY = 'publishing_paused';
+
+/** Crisis mode: when true the scheduler holds all scheduled posts (no publishing). */
+export async function isPublishingPaused(): Promise<boolean> {
+  const row = await prisma.appSetting.findUnique({ where: { key: PAUSE_KEY } });
+  return row?.value === 'true';
+}
+
+export async function setPublishingPaused(paused: boolean): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: PAUSE_KEY },
+    create: { key: PAUSE_KEY, value: String(paused) },
+    update: { value: String(paused) },
+  });
+}
 
 let timer: NodeJS.Timeout | null = null;
 let running = false; // guards against overlapping runs (interval + manual trigger)
@@ -32,6 +47,9 @@ export async function publishDuePosts(nowMs = Date.now()): Promise<number> {
 }
 
 async function runDuePosts(nowMs: number): Promise<number> {
+  // Crisis mode — hold everything until publishing is resumed.
+  if (await isPublishingPaused()) return 0;
+
   const due = await prisma.post.findMany({
     where: { status: 'scheduled', scheduledAt: { lte: new Date(nowMs) } },
   });

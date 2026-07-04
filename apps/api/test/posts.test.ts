@@ -53,4 +53,28 @@ describe('Posts', () => {
     const approve = await request(app).post(`/api/posts/${id}/approve`).set(bearer(token));
     expect(approve.body.data.approvalStatus).toBe('approved');
   });
+
+  it('crisis mode pauses the scheduler and resume restarts it', async () => {
+    // Schedule a post that is already due.
+    const create = await request(app)
+      .post('/api/posts')
+      .set(bearer(token))
+      .send({ content: 'Paused post', networks: ['twitter'], status: 'scheduled', scheduledAt: new Date(Date.now() - 1000).toISOString() });
+    const id = create.body.data.id;
+
+    await request(app).post('/api/posts/pause-publishing').set(bearer(token));
+    const status = await request(app).get('/api/posts/publishing-status').set(bearer(token));
+    expect(status.body.data.paused).toBe(true);
+
+    // While paused, running the scheduler publishes nothing.
+    const runPaused = await request(app).post('/api/posts/run-scheduler').set(bearer(token));
+    expect(runPaused.body.data.published).toBe(0);
+    const stillScheduled = await request(app).get(`/api/posts/${id}`).set(bearer(token));
+    expect(stillScheduled.body.data.status).toBe('scheduled');
+
+    // Resume and it publishes.
+    await request(app).post('/api/posts/resume-publishing').set(bearer(token));
+    const runResumed = await request(app).post('/api/posts/run-scheduler').set(bearer(token));
+    expect(runResumed.body.data.published).toBeGreaterThanOrEqual(1);
+  });
 });
