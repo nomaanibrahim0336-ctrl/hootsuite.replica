@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Message, MessageStatus } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock } from 'lucide-react';
+import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2 } from 'lucide-react';
 
 const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolved'];
 
@@ -20,6 +20,7 @@ export default function InboxPage() {
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [reply, setReply] = useState('');
   const [note, setNote] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +56,19 @@ export default function InboxPage() {
       api.markMessageRead(m.id).catch(() => {
         // API unreachable — local read state stands as the offline result.
       });
+    }
+  };
+
+  const suggestReply = async () => {
+    if (!active) return;
+    setSuggesting(true);
+    try {
+      const res = await api.aiReply(active.content, active.sentiment);
+      setReply(res.reply);
+    } catch {
+      toast.error('Could not draft a reply — API unreachable');
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -141,7 +155,15 @@ export default function InboxPage() {
               </div>
 
               <div className="border-t border-slate-100 px-5 py-2">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={suggestReply}
+                    disabled={suggesting}
+                    className="flex items-center gap-1 rounded-full bg-gradient-to-r from-accent to-[#FF7A3D] px-3 py-1 text-xs font-semibold text-accent-ink disabled:opacity-60"
+                  >
+                    {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    AI suggest
+                  </button>
                   {savedReplies.map((sr) => (
                     <button key={sr.id} onClick={() => setReply(sr.content)} className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent-deep">{sr.title}</button>
                   ))}

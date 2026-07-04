@@ -68,7 +68,102 @@ router.post('/sentiment', async (req, res) => {
   res.json({ success: true, data: { sentiment, provider, fallback: fallback || !['positive', 'negative', 'neutral'].includes(out.toLowerCase().trim()) } });
 });
 
+// Campaign generator: turn a single brief into a batch of ready-to-schedule posts.
+router.post('/campaign', async (req, res) => {
+  const { brief = 'our product', count = 5, tone = 'professional', networks = ['twitter', 'linkedin'] } = req.body ?? {};
+  const n = Math.min(Math.max(Number(count) || 5, 1), 12);
+  const system =
+    'You are a senior social media strategist. Output ONLY a numbered list, one post per line, ' +
+    'no preamble, no hashtags block — write each post as a complete ready-to-publish caption with tasteful emoji.';
+  const p = `Write ${n} distinct ${tone} social media posts for a campaign about: ${brief}. Vary the angle of each (tip, story, question, stat, announcement).`;
+  const { text, provider, fallback } = await complete(p, { system, maxTokens: 900 });
+  const useMock = fallback || provider === 'mock';
+  let posts = text
+    .split('\n')
+    .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, n);
+  if (useMock || posts.length === 0) posts = mockCampaign(String(brief), n, String(tone));
+  const data = posts.map((content) => ({ content, networks }));
+  res.json({ success: true, data: { posts: data, provider, fallback: useMock || posts.length === 0 } });
+});
+
+// Repurpose one post into per-network variants (X truncation, LinkedIn long-form, IG hooks, etc.).
+router.post('/repurpose', async (req, res) => {
+  const { content = '', networks = ['twitter', 'linkedin', 'instagram'] } = req.body ?? {};
+  const nets: string[] = Array.isArray(networks) ? networks : [];
+  const system =
+    'You adapt one social post for different platforms. For each requested network, output a line in the exact ' +
+    'form "network: adapted caption". Keep X/twitter under 280 chars, make LinkedIn more professional/long-form, ' +
+    'Instagram punchy with emoji, TikTok casual with a hook. No other text.';
+  const p = `Original post: "${content}"\nAdapt it for: ${nets.join(', ')}`;
+  const { text, provider, fallback } = await complete(p, { system, maxTokens: 600 });
+  const useMock = fallback || provider === 'mock';
+  const variants: Record<string, string> = {};
+  if (!useMock) {
+    for (const line of text.split('\n')) {
+      const m = line.match(/^\s*([a-zA-Z/ ]+?)\s*:\s*(.+)$/);
+      if (m) {
+        const key = m[1].toLowerCase().replace('/', '').replace('x', 'twitter').trim();
+        if (nets.includes(key)) variants[key] = m[2].trim();
+      }
+    }
+  }
+  for (const net of nets) if (!variants[net]) variants[net] = mockRepurpose(String(content), net);
+  res.json({ success: true, data: { variants, provider, fallback: useMock || Object.keys(variants).length === 0 } });
+});
+
+// Draft a reply to an inbox message, tuned to its sentiment.
+router.post('/reply', async (req, res) => {
+  const { message = '', sentiment = 'neutral', tone = 'friendly' } = req.body ?? {};
+  const system = 'You are a helpful brand support agent. Reply with ONLY the suggested reply text, no preamble. Keep it concise and on-brand.';
+  const p = `A customer wrote (${sentiment} sentiment): "${message}". Draft a ${tone} reply.`;
+  const { text, provider, fallback } = await complete(p, { system, maxTokens: 200 });
+  const useMock = fallback || provider === 'mock';
+  const reply = useMock ? mockReply(String(sentiment)) : text.trim();
+  res.json({ success: true, data: { reply, provider, fallback: useMock } });
+});
+
 // --- Offline fallbacks (used when no provider key is configured) ---
+function mockCampaign(brief: string, count: number, tone: string): string[] {
+  const angles = [
+    `🚀 Big news about ${brief} — here's why it matters for you.`,
+    `💡 Quick tip: get more out of ${brief} with this one change.`,
+    `🤔 What's the hardest part of ${brief}? Tell us below 👇`,
+    `📊 The numbers on ${brief} might surprise you.`,
+    `✨ Behind the scenes of how we approach ${brief}.`,
+    `🔥 Stop scrolling — ${brief} is about to change your workflow.`,
+    `📣 Customer story: how ${brief} made a real difference.`,
+    `🧵 A short thread on everything you should know about ${brief}.`,
+    `⏰ Best time to think about ${brief}? Right now.`,
+    `🎯 Three reasons ${brief} deserves your attention this week.`,
+    `🙌 We asked our team about ${brief} — here's what they said.`,
+    `📈 How ${brief} drives real, measurable results.`,
+  ];
+  return angles.slice(0, count);
+}
+function mockRepurpose(content: string, network: string): string {
+  const trimmed = content.length > 240 ? content.slice(0, 237) + '…' : content;
+  switch (network) {
+    case 'twitter':
+      return trimmed;
+    case 'linkedin':
+      return `${content}\n\nWhat's your take? I'd love to hear how your team approaches this.`;
+    case 'instagram':
+      return `✨ ${content} ✨\n\nDouble-tap if you agree! 💬👇`;
+    case 'tiktok':
+      return `POV: ${content} 🎬 #fyp`;
+    default:
+      return content;
+  }
+}
+function mockReply(sentiment: string): string {
+  if (sentiment === 'negative') return "So sorry to hear that! 🙏 Please DM us your account email and we'll make this right straight away.";
+  if (sentiment === 'positive') return 'Thank you so much for the kind words! 💜 It means a lot to our whole team.';
+  return 'Thanks for reaching out! Happy to help — could you share a little more detail so we can point you in the right direction?';
+}
+
+// --- Offline fallbacks for the original generators ---
 function mockCaption(prompt: string, tone: string): string {
   const openers: Record<string, string> = {
     professional: '📊 Insights that matter:',

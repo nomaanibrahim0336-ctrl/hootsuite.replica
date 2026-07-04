@@ -16,6 +16,7 @@ import {
   Radio,
   BarChart2,
   Megaphone,
+  Sparkles,
   Settings,
   Zap,
   HelpCircle,
@@ -28,6 +29,7 @@ const unreadCount = messages.filter((m) => !m.isRead).length;
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/ai-studio', label: 'AI Studio', icon: Sparkles },
   { href: '/publisher', label: 'Publisher', icon: Send },
   { href: '/calendar', label: 'Planner', icon: CalendarDays },
   { href: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },

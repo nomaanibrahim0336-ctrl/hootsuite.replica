@@ -179,6 +179,21 @@ export const api = {
     request<{ ideas: string[] }>('/ai/ideas', { method: 'POST', body: JSON.stringify({ industry, count }) }),
   aiSentiment: (text: string) =>
     request<{ sentiment: string }>('/ai/sentiment', { method: 'POST', body: JSON.stringify({ text }) }),
+  aiCampaign: (brief: string, count: number, tone: string, networks: string[]) =>
+    request<{ posts: { content: string; networks: string[] }[]; provider: string; fallback: boolean }>('/ai/campaign', {
+      method: 'POST',
+      body: JSON.stringify({ brief, count, tone, networks }),
+    }),
+  aiRepurpose: (content: string, networks: string[]) =>
+    request<{ variants: Record<string, string>; provider: string; fallback: boolean }>('/ai/repurpose', {
+      method: 'POST',
+      body: JSON.stringify({ content, networks }),
+    }),
+  aiReply: (message: string, sentiment: string, tone = 'friendly') =>
+    request<{ reply: string; provider: string; fallback: boolean }>('/ai/reply', {
+      method: 'POST',
+      body: JSON.stringify({ message, sentiment, tone }),
+    }),
 
   // AI provider config
   aiStatus: () =>
