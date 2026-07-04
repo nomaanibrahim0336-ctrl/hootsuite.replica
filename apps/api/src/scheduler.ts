@@ -38,17 +38,6 @@ async function deliver(post: { id: string; content: string; networks: string[]; 
     return;
   }
 
-  // Look up the author's Ayrshare profile key
-  const profileKey = post.authorId
-    ? (await prisma.user.findUnique({ where: { id: post.authorId }, select: { ayrshareProfileKey: true } }))?.ayrshareProfileKey
-    : null;
-
-  if (!profileKey) {
-    // Author hasn't connected via Ayrshare — skip real delivery, mark as published anyway
-    console.log(`[scheduler] post ${post.id}: author has no Ayrshare profile, skipping real delivery`);
-    return;
-  }
-
   // Map internal network names to Ayrshare platform identifiers
   const PLATFORM_MAP: Record<string, string> = {
     facebook: 'facebook',
@@ -61,7 +50,7 @@ async function deliver(post: { id: string; content: string; networks: string[]; 
   const platforms = post.networks.map((n) => PLATFORM_MAP[n] ?? n).filter(Boolean);
   if (!platforms.length) return;
 
-  await ayrshare.publishPost(profileKey, post.content, platforms);
+  await ayrshare.publishPost(post.content, platforms);
 }
 
 /** Publish every scheduled post whose time has come. Returns count published. */

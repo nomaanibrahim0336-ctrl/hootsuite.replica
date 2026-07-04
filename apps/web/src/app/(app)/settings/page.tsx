@@ -64,8 +64,7 @@ function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
-  const [ayrshare, setAyrshare] = useState<{ configured: boolean; connected: boolean; activeSocialAccounts: string[] } | null>(null);
-  const [ayrshareLoading, setAyrshareLoading] = useState(false);
+  const [ayrshare, setAyrshare] = useState<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; error?: string } | null>(null);
 
   // Handle OAuth return — show success/error toast and clean the URL
   useEffect(() => {
@@ -190,30 +189,15 @@ function SettingsPage() {
     }
   };
 
-  const connectAyrshare = async () => {
-    setAyrshareLoading(true);
-    try {
-      const { url } = await api.ayrshareLink();
-      window.open(url, '_blank', 'noopener,noreferrer,width=700,height=700');
-      // Poll for updated status after the user (hopefully) connects
-      setTimeout(async () => {
-        try {
-          const fresh = await api.ayrshareStatus();
-          setAyrshare(fresh);
-        } catch { /* ignore */ }
-        setAyrshareLoading(false);
-      }, 5000);
-    } catch (e: any) {
-      toast.error(e?.message || 'Could not generate Ayrshare link');
-      setAyrshareLoading(false);
-    }
+  const openAyrshareDashboard = () => {
+    window.open('https://app.ayrshare.com', '_blank', 'noopener,noreferrer');
   };
 
   const refreshAyrshareStatus = async () => {
     try {
       const fresh = await api.ayrshareStatus();
       setAyrshare(fresh);
-      toast.success('Ayrshare status refreshed');
+      toast.success('Status refreshed');
     } catch { /* ignore */ }
   };
 
@@ -323,6 +307,9 @@ function SettingsPage() {
               </div>
             ) : (
               <div className="space-y-4">
+                {ayrshare.error && (
+                  <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{ayrshare.error}</p>
+                )}
                 {ayrshare.activeSocialAccounts.length > 0 ? (
                   <div>
                     <p className="mb-2 text-sm font-medium text-slate-700">Connected networks</p>
@@ -339,16 +326,13 @@ function SettingsPage() {
                   <p className="text-sm text-slate-500">No social accounts connected yet.</p>
                 )}
                 <div className="flex gap-2">
-                  <Button onClick={connectAyrshare} disabled={ayrshareLoading}>
-                    {ayrshareLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {ayrshare.connected ? 'Manage connected accounts' : 'Connect social accounts'}
+                  <Button onClick={openAyrshareDashboard}>
+                    {ayrshare.activeSocialAccounts.length > 0 ? 'Manage in Ayrshare' : 'Connect accounts in Ayrshare'}
                   </Button>
-                  {ayrshare.connected && (
-                    <Button variant="secondary" onClick={refreshAyrshareStatus}>Refresh status</Button>
-                  )}
+                  <Button variant="secondary" onClick={refreshAyrshareStatus}>Refresh status</Button>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Clicking the button opens Ayrshare&apos;s secure hosted page where you authorise each network. Your tokens are stored in Ayrshare — never in this app.
+                  Connect your social accounts once at <span className="font-medium">app.ayrshare.com</span> → Social Accounts. Once connected, this app publishes through Ayrshare automatically.
                 </p>
               </div>
             )}

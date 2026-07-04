@@ -254,9 +254,7 @@ export const api = {
 
   // Ayrshare social account integration
   ayrshareStatus: () =>
-    request<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; profileKey?: string; error?: string }>('/ayrshare/status'),
-  ayrshareLink: () =>
-    request<{ url: string }>('/ayrshare/link', { method: 'POST' }),
+    request<{ configured: boolean; connected: boolean; activeSocialAccounts: string[]; dashboardUrl?: string; error?: string }>('/ayrshare/status'),
   ayrshareNetworks: () =>
     request<string[]>('/ayrshare/networks'),
 
