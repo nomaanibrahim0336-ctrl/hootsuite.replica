@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip } from '@/components/ui';
+import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Skeleton } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { toast } from '@/components/Toast';
@@ -24,8 +24,11 @@ const approvalColor: Record<string, string> = { pending: 'amber', approved: 'gre
 export default function PublisherPage() {
   const openComposer = useUiStore((s) => s.openComposer);
   const [list, setList] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | PostStatus>('all');
   const [toDelete, setToDelete] = useState<Post | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +41,8 @@ export default function PublisherPage() {
         // Live API unreachable — fall back to demo data so the page still renders.
         setList(seedPosts);
         toast.info('Showing demo data — live API unreachable.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -60,6 +65,7 @@ export default function PublisherPage() {
     if (!toDelete) return;
     const id = toDelete.id;
     setList((l) => l.filter((p) => p.id !== id));
+    setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
     toast.success('Post deleted');
     setToDelete(null);
     try {
@@ -67,6 +73,33 @@ export default function PublisherPage() {
     } catch {
       // API unreachable — local removal stands as the offline result.
     }
+  };
+
+  const toggleSelect = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  const toggleSelectAll = () =>
+    setSelected((s) => (s.size === filtered.length ? new Set() : new Set(filtered.map((p) => p.id))));
+
+  const bulkApprove = async () => {
+    const ids = [...selected];
+    setList((l) => l.map((p) => (selected.has(p.id) ? { ...p, approvalStatus: 'approved' } : p)));
+    setSelected(new Set());
+    toast.success(`${ids.length} post${ids.length > 1 ? 's' : ''} approved ✓`);
+    await Promise.allSettled(ids.map((id) => api.approvePost(id)));
+  };
+
+  const confirmBulkDelete = async () => {
+    const ids = [...selected];
+    setList((l) => l.filter((p) => !selected.has(p.id)));
+    setSelected(new Set());
+    setBulkDeleteOpen(false);
+    toast.success(`${ids.length} post${ids.length > 1 ? 's' : ''} deleted`);
+    await Promise.allSettled(ids.map((id) => api.deletePost(id)));
   };
 
   return (
@@ -121,9 +154,57 @@ export default function PublisherPage() {
             </div>
           }
         />
+        {/* Bulk action bar — appears when posts are selected */}
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-accent-light/40 px-5 py-2.5">
+            <span className="text-sm font-medium text-accent-deep">{selected.size} selected</span>
+            <Button variant="secondary" size="sm" onClick={bulkApprove}>
+              <CheckCircle2 className="h-4 w-4" /> Approve
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4 text-negative" /> Delete
+            </Button>
+            <button onClick={() => setSelected(new Set())} className="ml-auto text-xs font-medium text-slate-500 hover:underline">
+              Clear
+            </button>
+          </div>
+        )}
+
+        {/* Select-all row */}
+        {!loading && filtered.length > 0 && (
+          <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-2">
+            <input
+              type="checkbox"
+              checked={selected.size === filtered.length && filtered.length > 0}
+              onChange={toggleSelectAll}
+              aria-label="Select all posts"
+              className="h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent"
+            />
+            <span className="text-xs text-slate-400">Select all</span>
+          </div>
+        )}
+
         <div className="divide-y divide-slate-100">
-          {filtered.map((p) => (
-            <div key={p.id} className="flex items-start gap-4 px-5 py-4">
+          {loading &&
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4">
+                <Skeleton className="h-6 w-6 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="mt-2 h-3 w-32" />
+                </div>
+                <Skeleton className="h-5 w-16" />
+              </div>
+            ))}
+          {!loading && filtered.map((p) => (
+            <div key={p.id} className={cn('flex items-start gap-4 px-5 py-4', selected.has(p.id) && 'bg-accent-light/20')}>
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={() => toggleSelect(p.id)}
+                aria-label="Select post"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent"
+              />
               <div className="flex -space-x-1.5 pt-0.5">
                 {p.networks.map((n) => <NetworkChip key={n} type={n} size={24} />)}
               </div>
@@ -150,7 +231,7 @@ export default function PublisherPage() {
               </button>
             </div>
           ))}
-          {filtered.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <EmptyState
               icon={filter === 'all' ? FileText : InboxIcon}
               title="No posts here yet"
@@ -167,6 +248,14 @@ export default function PublisherPage() {
         message="This action cannot be undone. The post will be permanently removed."
         onConfirm={confirmDelete}
         onCancel={() => setToDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={`Delete ${selected.size} post${selected.size > 1 ? 's' : ''}?`}
+        message="This action cannot be undone. The selected posts will be permanently removed."
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
     </div>
   );

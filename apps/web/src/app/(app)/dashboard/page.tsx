@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, Clock, Activity, Gauge, Sparkles } from 'lucide-react';
-import { Card, CardHeader, PageHeader, NetworkChip, Badge, Avatar } from '@/components/ui';
+import { Card, CardHeader, PageHeader, NetworkChip, Badge, Avatar, Skeleton } from '@/components/ui';
 import { dashboardMetrics as mockMetrics, analyticsTrend as mockTrend, posts as mockPosts, networks as mockNetworks, activityStream, brandHealth, bestTimes } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { toast } from '@/components/Toast';
@@ -69,17 +69,25 @@ export default function DashboardPage() {
         }
       />
 
-      <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', loading && 'opacity-60')}>
-        {dashboardMetrics.map((m) => (
-          <Card key={m.label} className="p-5">
-            <p className="text-sm text-slate-500">{m.label}</p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">{formatNumber(m.value)}</p>
-            <div className={cn('mt-2 inline-flex items-center gap-1 text-sm font-medium', m.changeType === 'increase' ? 'text-positive' : 'text-negative')}>
-              {m.changeType === 'increase' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-              {m.change}% <span className="font-normal text-slate-400">vs last period</span>
-            </div>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-5">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="mt-3 h-8 w-20" />
+                <Skeleton className="mt-3 h-4 w-28" />
+              </Card>
+            ))
+          : dashboardMetrics.map((m) => (
+              <Card key={m.label} className="p-5">
+                <p className="text-sm text-slate-500">{m.label}</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{formatNumber(m.value)}</p>
+                <div className={cn('mt-2 inline-flex items-center gap-1 text-sm font-medium', m.changeType === 'increase' ? 'text-positive' : 'text-negative')}>
+                  {m.changeType === 'increase' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                  {m.change}% <span className="font-normal text-slate-400">vs last period</span>
+                </div>
+              </Card>
+            ))}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
