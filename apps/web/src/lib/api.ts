@@ -249,6 +249,9 @@ export const api = {
   getTeam: () => request<any[]>('/teams'),
   inviteMember: (payload: any) => request('/teams/members', { method: 'POST', body: JSON.stringify(payload) }),
 
+  // Audit
+  getAudit: () => request<any[]>('/audit'),
+
   // Advocacy (Amplify)
   getAdvocacyContent: () => request<any[]>('/advocacy/content'),
   getAdvocacyAnalytics: () => request<{ totalShares: number; totalReach: number; leaderboard: any[] }>('/advocacy/analytics'),

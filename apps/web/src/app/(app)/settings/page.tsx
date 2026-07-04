@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
-import { networks as seedNetworks, team as seedTeam, currentUser, auditLog } from '@/lib/mock';
+import { networks as seedNetworks, team as seedTeam, currentUser, auditLog as seedAuditLog } from '@/lib/mock';
 import { api } from '@/lib/api';
 import { NETWORK_META, formatNumber } from '@/lib/utils';
 import type { Network, TeamMember, UserRole } from '@/lib/types';
@@ -20,10 +20,11 @@ const roleColor: Record<UserRole, string> = {
 };
 
 export default function SettingsPage() {
-  const [networks, setNetworks] = useState<Network[]>(seedNetworks);
+  const [networks, setNetworks] = useState<Network[]>([]);
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
   const [team, setTeam] = useState<TeamMember[]>([]);
+  const [auditLog, setAuditLog] = useState<typeof seedAuditLog>([]);
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -32,12 +33,25 @@ export default function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.getTeam();
-        if (!cancelled) setTeam(res ?? []);
+        const [teamRes, networksRes, auditRes] = await Promise.all([
+          api.getTeam(),
+          api.getNetworks(),
+          api.getAudit().catch(() => null), // viewer role may lack VIEW_AUDIT — not fatal
+        ]);
+        if (cancelled) return;
+        setTeam(teamRes ?? []);
+        setNetworks(networksRes ?? []);
+        if (auditRes) {
+          setAuditLog(auditRes.map((e: any) => ({
+            id: e.id, action: e.action, entity: e.entity, actor: e.userId ?? 'system', timestamp: e.createdAt,
+          })));
+        }
       } catch {
         if (cancelled) return;
         // Live API unreachable — fall back to demo data so the page still renders.
         setTeam(seedTeam);
+        setNetworks(seedNetworks);
+        setAuditLog(seedAuditLog);
         toast.info('Showing demo data — live API unreachable.');
       }
     })();
@@ -60,15 +74,17 @@ export default function SettingsPage() {
     }
   };
 
-  const toggle = (id: string) =>
-    setNetworks((l) =>
-      l.map((n) => {
-        if (n.id !== id) return n;
-        const connected = !n.connected;
-        toast.success(`${NETWORK_META[n.type].label} ${connected ? 'connected' : 'disconnected'}`);
-        return { ...n, connected, followers: connected ? Math.floor(Math.random() * 40000 + 5000) : 0 };
-      })
-    );
+  const toggle = (id: string) => {
+    const target = networks.find((n) => n.id === id);
+    if (!target) return;
+    const connected = !target.connected;
+    setNetworks((l) => l.map((n) => (n.id === id ? { ...n, connected, followers: connected ? n.followers : 0 } : n)));
+    toast.success(`${NETWORK_META[target.type].label} ${connected ? 'connected' : 'disconnected'}`);
+    (connected ? api.connectNetwork({ type: target.type, name: target.username, username: target.username }) : api.disconnectNetwork(id))
+      .catch(() => {
+        // Live API unreachable — local toggle stands as the offline result.
+      });
+  };
 
   return (
     <div>
