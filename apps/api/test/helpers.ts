@@ -6,14 +6,15 @@ export const app = createApp();
 
 let counter = 0;
 
-/** Register a fresh user and return { token, userId, email }. */
+/** Register a fresh user and return { token, refreshToken, userId, email }. */
 export async function authAs(role: 'owner' | 'admin' | 'editor' | 'viewer' = 'owner') {
   const email = `user${Date.now()}_${counter++}@test.com`;
   const res = await request(app).post('/api/auth/register').send({ email, password: 'secret123', name: 'Test User' });
   const token = res.body.data.accessToken as string;
+  const refreshToken = res.body.data.refreshToken as string;
   const userId = res.body.data.user.id as string;
   if (role !== 'owner') await prisma.user.update({ where: { id: userId }, data: { role } });
-  return { token, userId, email };
+  return { token, refreshToken, userId, email };
 }
 
 export const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });

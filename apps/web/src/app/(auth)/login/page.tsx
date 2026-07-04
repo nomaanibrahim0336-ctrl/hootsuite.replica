@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Zap } from 'lucide-react';
-import { api, setToken, startSession } from '@/lib/api';
+import { api, setToken, setRefreshToken, startSession } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +18,7 @@ export default function LoginPage() {
     try {
       const res = await api.login(email, password);
       setToken(res.accessToken);
+      setRefreshToken(res.refreshToken);
     } catch {
       // API unavailable — proceed in demo mode.
     } finally {
@@ -49,7 +50,12 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700">Password</label>
+              <Link href="/forgot-password" className="text-xs font-medium text-accent-deep hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               value={password}

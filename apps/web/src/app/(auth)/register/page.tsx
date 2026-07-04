@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Zap } from 'lucide-react';
-import { api, setToken, startSession } from '@/lib/api';
+import { api, setToken, setRefreshToken, startSession } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export default function RegisterPage() {
     try {
       const res = await api.register(form.email, form.password, form.name);
       setToken(res.accessToken);
+      setRefreshToken(res.refreshToken);
     } catch {
       // API unavailable — proceed in demo mode.
     } finally {

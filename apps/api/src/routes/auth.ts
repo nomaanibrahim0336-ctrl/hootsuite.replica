@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma';
-import { signTokens, verifyRefresh } from '../auth';
+import { signTokens, verifyRefresh, signResetToken, verifyResetToken } from '../auth';
 import { validateBody, rules } from '../validate';
 
 const router = Router();
@@ -51,6 +51,36 @@ router.post('/refresh', (req, res) => {
   if (!userId) return res.status(401).json({ success: false, error: 'Invalid refresh token' });
   res.json({ success: true, data: signTokens(userId) });
 });
+
+router.post(
+  '/forgot-password',
+  validateBody({ email: { type: 'string', required: true, pattern: rules.EMAIL } }),
+  async (req, res) => {
+    const { email } = req.body ?? {};
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Same response whether or not the email exists, so this endpoint can't be used to enumerate accounts.
+    if (!user) return res.json({ success: true, data: {} });
+    const resetToken = signResetToken(user.id);
+    // No email provider is configured yet, so the token is returned directly instead of
+    // being emailed. Swap this for a real send (e.g. Resend/SendGrid) once one is wired up.
+    res.json({ success: true, data: { resetToken } });
+  }
+);
+
+router.post(
+  '/reset-password',
+  validateBody({
+    token: { type: 'string', required: true },
+    password: { type: 'string', required: true, minLength: 6, maxLength: 128 },
+  }),
+  async (req, res) => {
+    const { token, password } = req.body ?? {};
+    const userId = verifyResetToken(token);
+    if (!userId) return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+    res.json({ success: true, data: null });
+  }
+);
 
 router.post('/logout', (_req, res) => res.json({ success: true, data: null }));
 

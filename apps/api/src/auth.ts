@@ -23,6 +23,19 @@ export function verifyRefresh(token: string): string | null {
   }
 }
 
+export function signResetToken(userId: string): string {
+  return jwt.sign({ sub: userId, purpose: 'reset' }, JWT_SECRET, { expiresIn: '15m' });
+}
+
+export function verifyResetToken(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; purpose?: string };
+    return payload.purpose === 'reset' ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {

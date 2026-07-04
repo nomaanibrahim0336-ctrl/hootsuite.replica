@@ -4,6 +4,7 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const TOKEN_KEY = 'socialhub_token';
+const REFRESH_TOKEN_KEY = 'socialhub_refresh_token';
 const SESSION_KEY = 'socialhub_session';
 
 export function setToken(token: string) {
@@ -14,6 +15,16 @@ export function getToken(): string | null {
 }
 export function clearToken() {
   if (typeof window !== 'undefined') localStorage.removeItem(TOKEN_KEY);
+}
+
+export function setRefreshToken(token: string) {
+  if (typeof window !== 'undefined') localStorage.setItem(REFRESH_TOKEN_KEY, token);
+}
+export function getRefreshToken(): string | null {
+  return typeof window !== 'undefined' ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+}
+export function clearRefreshToken() {
+  if (typeof window !== 'undefined') localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
 // Session marker — set on login/register (even in offline demo mode so the
@@ -29,6 +40,7 @@ export function endSession() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   }
 }
 
@@ -47,7 +59,36 @@ interface ApiResult<T> {
   total?: number;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+// Exchanges the stored refresh token for a new access token. Deduplicated so
+// concurrent 401s (e.g. the dashboard's Promise.all of several endpoints)
+// only trigger one /auth/refresh call instead of a stampede.
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+      try {
+        const res = await fetch(`${BASE}/api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const body = (await res.json()) as ApiResult<{ accessToken: string; refreshToken: string }>;
+        if (!res.ok || !body.success) return false;
+        setToken(body.data.accessToken);
+        setRefreshToken(body.data.refreshToken);
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE}/api${path}`, {
     ...options,
@@ -57,6 +98,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {}),
     },
   });
+  if (res.status === 401 && !isRetry && !path.startsWith('/auth/')) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return request<T>(path, options, true);
+    clearToken();
+    clearRefreshToken();
+  }
   const body = (await res.json()) as ApiResult<T>;
   if (!res.ok || !body.success) throw new Error(body.error || `Request failed (${res.status})`);
   return body.data;
@@ -73,6 +120,16 @@ export const api = {
     request<{ user: any; accessToken: string; refreshToken: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    }),
+  forgotPassword: (email: string) =>
+    request<{ resetToken?: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, password: string) =>
+    request<{ success: true }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
     }),
 
   // Networks
