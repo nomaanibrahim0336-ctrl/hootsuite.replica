@@ -1,16 +1,14 @@
 // Zernio API client — direct social platform connections.
 //
-// Zernio is used as a third integration option alongside Ayrshare and
-// direct OAuth. Configure via env vars:
+// Configure via env vars:
 //   ZERNIO_API_KEY — bearer token from your Zernio dashboard (required)
-//   ZERNIO_API_URL — base URL, defaults to https://api.zernio.com/v1
+//   ZERNIO_API_URL — base URL override (defaults to https://zernio.com/api/v1)
 //
-// If ZERNIO_API_KEY is unset, isConfigured() returns false and all
-// endpoints report the provider as unavailable — the app still functions
-// through Ayrshare / direct OAuth.
+// API ref: https://zernio.com/api/v1  Auth: Bearer API key
+// Key concepts: profile (container) → accounts (connected social accounts)
 
-const DEFAULT_BASE = 'https://api.zernio.com/v1';
-const BASE = process.env.ZERNIO_API_URL || DEFAULT_BASE;
+const DEFAULT_BASE = 'https://zernio.com/api/v1';
+const BASE = (process.env.ZERNIO_API_URL || DEFAULT_BASE).replace(/\/$/, '');
 const API_KEY = process.env.ZERNIO_API_KEY || '';
 
 export function isConfigured(): boolean {
@@ -34,16 +32,11 @@ async function call<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export interface ZernioAccount {
+  id: string;        // Zernio _id — used for disconnect / posting
   platform: string;
   handle: string;
   connected: boolean;
   followers?: number;
-  connectedAt?: string;
-}
-
-export interface ZernioStatus {
-  configured: boolean;
-  accounts: ZernioAccount[];
 }
 
 export interface ZernioPostResult {
@@ -54,40 +47,74 @@ export interface ZernioPostResult {
   error?: string;
 }
 
-/** List all connected social accounts for the account represented by the API key. */
+/** Fetch the first (default) profile ID — required by the connect flow. */
+async function getDefaultProfileId(): Promise<string> {
+  const data = await call<{ profiles: { _id: string; isDefault?: boolean }[] }>('/profiles');
+  const profiles = data.profiles ?? [];
+  if (!profiles.length) {
+    throw new Error('No Zernio profiles found. Create a profile at zernio.com/dashboard first.');
+  }
+  return (profiles.find(p => p.isDefault) ?? profiles[0])._id;
+}
+
+/** List all connected social accounts for this API key. */
 export async function listAccounts(): Promise<ZernioAccount[]> {
-  const data = await call<{ accounts?: ZernioAccount[] }>('/accounts');
-  return data.accounts ?? [];
+  const data = await call<{ accounts: any[] }>('/accounts');
+  return (data.accounts ?? []).map((a: any) => ({
+    id: a._id,
+    platform: a.platform,
+    handle: a.username || a.displayName || a.platform,
+    connected: a.isActive !== false,
+    followers: a.followersCount,
+  }));
 }
 
-/** Generate a hosted URL where the end user connects their social account.
- *  returnTo is where Zernio should redirect the user after they finish. */
+/** Get the OAuth authUrl to redirect the user to for connecting a platform.
+ *  After OAuth completes, Zernio redirects to returnTo with ?connected=platform. */
 export async function generateConnectUrl(platform: string, returnTo: string): Promise<{ url: string }> {
-  return call<{ url: string }>('/connect/url', {
-    method: 'POST',
-    body: JSON.stringify({ platform, returnTo }),
-  });
+  const profileId = await getDefaultProfileId();
+  const qs = new URLSearchParams({ profileId, ...(returnTo ? { redirect_url: returnTo } : {}) });
+  const data = await call<{ authUrl: string }>(`/connect/${encodeURIComponent(platform)}?${qs}`);
+  return { url: data.authUrl };
 }
 
-/** Publish a post to one or more platforms immediately. */
-export async function publish(text: string, platforms: string[], mediaUrls?: string[]): Promise<ZernioPostResult[]> {
-  const data = await call<{ results: ZernioPostResult[] }>('/publish', {
+/** Publish a post immediately to the given platform names.
+ *  Looks up the matching connected accountIds internally. */
+export async function publish(text: string, platformNames: string[]): Promise<ZernioPostResult[]> {
+  const accounts = await listAccounts();
+  const targets = platformNames
+    .map(p => accounts.find(a => a.platform === p))
+    .filter(Boolean)
+    .map(a => ({ platform: a!.platform, accountId: a!.id }));
+
+  if (!targets.length) {
+    throw new Error(`No connected Zernio accounts for: ${platformNames.join(', ')}`);
+  }
+
+  const data = await call<{ post: any }>('/posts', {
     method: 'POST',
-    body: JSON.stringify({ text, platforms, mediaUrls: mediaUrls ?? [] }),
+    body: JSON.stringify({ content: text, platforms: targets, publishNow: true }),
   });
-  return data.results;
+
+  const post = data.post ?? {};
+  return ((post.platforms as any[]) ?? targets).map((t: any) => ({
+    id: post._id ?? '',
+    platform: t.platform,
+    url: t.platformPostUrl,
+    status: (t.status === 'failed' ? 'failed' : 'published') as 'published' | 'failed',
+  }));
 }
 
-/** Schedule a post at a specific UTC time. */
-export async function schedule(text: string, platforms: string[], when: Date, mediaUrls?: string[]): Promise<ZernioPostResult[]> {
-  const data = await call<{ results: ZernioPostResult[] }>('/schedule', {
-    method: 'POST',
-    body: JSON.stringify({ text, platforms, scheduledAt: when.toISOString(), mediaUrls: mediaUrls ?? [] }),
-  });
-  return data.results;
-}
-
-/** Disconnect a platform. */
-export async function disconnect(platform: string): Promise<void> {
-  await call(`/accounts/${platform}`, { method: 'DELETE' });
+/** Disconnect a social account.
+ *  Accepts either a Zernio accountId (24-char hex) or a platform name (slower — requires a listAccounts lookup). */
+export async function disconnect(accountIdOrPlatform: string): Promise<void> {
+  // If it looks like a Zernio ObjectId, use it directly; otherwise resolve via platform name.
+  if (/^[0-9a-f]{24}$/i.test(accountIdOrPlatform)) {
+    await call(`/accounts/${accountIdOrPlatform}`, { method: 'DELETE' });
+    return;
+  }
+  const accounts = await listAccounts();
+  const account = accounts.find(a => a.platform === accountIdOrPlatform);
+  if (!account) throw new Error(`No connected Zernio account for platform: ${accountIdOrPlatform}`);
+  await call(`/accounts/${account.id}`, { method: 'DELETE' });
 }
