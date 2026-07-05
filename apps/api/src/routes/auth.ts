@@ -21,7 +21,7 @@ router.post(
     return res.status(409).json({ success: false, error: 'Email already registered' });
   }
   const user = await prisma.user.create({
-    data: { email, name, passwordHash: await bcrypt.hash(password, 10), role: 'owner' },
+    data: { email, name, passwordHash: await bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 1 : 10), role: 'owner' },
   });
   res.status(201).json({ success: true, data: { user: publicUser(user), ...signTokens(user.id) } });
 });
@@ -80,7 +80,7 @@ router.post(
     const { token, password } = req.body ?? {};
     const userId = verifyResetToken(token);
     if (!userId) return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(password, process.env.NODE_ENV === 'test' ? 1 : 10) } });
     res.json({ success: true, data: null });
   }
 );

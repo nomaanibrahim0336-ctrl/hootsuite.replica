@@ -1,0 +1,177 @@
+// SocialHub data model.
+// Dev uses SQLite for a zero-setup, runnable DB. For production, switch
+// `provider` to "postgresql" and point DATABASE_URL at the Postgres in
+// docker-compose.yml — the models below are provider-agnostic.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  name                String
+  passwordHash        String
+  role                String   @default("owner")
+  createdAt           DateTime @default(now())
+  ayrshareProfileKey  String?
+
+  posts   Post[]
+  reports Report[]
+}
+
+model Network {
+  id             String    @id @default(uuid())
+  type           String
+  name           String
+  username       String
+  followers      Int       @default(0)
+  connected      Boolean   @default(true)
+  connectedAt    DateTime  @default(now())
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  pageId         String?
+  pageAccessToken String?
+}
+
+model Post {
+  id          String    @id @default(uuid())
+  content     String
+  networks    String // JSON-encoded string[]
+  status      String    @default("draft")
+  hashtags    String? // JSON-encoded string[]
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  engagements String? // JSON-encoded engagement object
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Approval workflow
+  approvalStatus String  @default("none") // none | pending | approved | rejected
+  submittedBy    String?
+  approvedBy     String?
+
+  author   User?   @relation(fields: [authorId], references: [id])
+  authorId String?
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String?
+  userId    String?
+  meta      String? // JSON-encoded details
+  createdAt DateTime @default(now())
+}
+
+model AdvocacyContent {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  category  String   @default("General")
+  createdAt DateTime @default(now())
+
+  shares AdvocacyShare[]
+}
+
+model AdvocacyShare {
+  id            String   @id @default(uuid())
+  employeeName  String
+  employeeEmail String
+  reach         Int      @default(0)
+  sharedAt      DateTime @default(now())
+
+  content   AdvocacyContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  network    String
+  senderName String
+  senderUser String
+  content    String
+  type       String   @default("dm")
+  status     String   @default("unread")
+  assignedTo String?
+  sentiment  String   @default("neutral")
+  isRead     Boolean  @default(false)
+  timestamp  DateTime @default(now())
+
+  replies MessageReply[]
+}
+
+model MessageReply {
+  id        String   @id @default(uuid())
+  content   String
+  isFromUs  Boolean  @default(true)
+  timestamp DateTime @default(now())
+
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+}
+
+model SavedReply {
+  id      String @id @default(uuid())
+  title   String
+  content String
+}
+
+model Stream {
+  id           String   @id @default(uuid())
+  name         String
+  keywords     String // JSON-encoded string[]
+  sources      String // JSON-encoded string[]
+  isActive     Boolean  @default(true)
+  mentionCount Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  mentions Mention[]
+}
+
+model Mention {
+  id          String   @id @default(uuid())
+  network     String
+  authorName  String
+  authorUser  String
+  content     String
+  sentiment   String   @default("neutral")
+  likes       Int      @default(0)
+  shares      Int      @default(0)
+  comments    Int      @default(0)
+  timestamp   DateTime @default(now())
+
+  stream   Stream? @relation(fields: [streamId], references: [id])
+  streamId String?
+}
+
+model Report {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   @default("custom")
+  networks  String // JSON-encoded string[]
+  createdAt DateTime @default(now())
+
+  owner   User?   @relation(fields: [ownerId], references: [id])
+  ownerId String?
+}
+
+model AppSetting {
+  key   String @id
+  value String
+}
+
+model TeamMember {
+  id       String   @id @default(uuid())
+  name     String
+  email    String
+  role     String   @default("viewer")
+  joinedAt DateTime @default(now())
+}

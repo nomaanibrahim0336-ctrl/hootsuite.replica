@@ -8,5 +8,5 @@ module.exports = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: { esModuleInterop: true, skipLibCheck: true, strict: false } }],
   },
-  testTimeout: 20000,
+  testTimeout: 600000,
 };

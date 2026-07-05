@@ -10,8 +10,12 @@ const router = Router();
 
 // Manually run the scheduler now (publishes any due posts). Handy for demos.
 router.post('/run-scheduler', async (_req, res) => {
-  const published = await publishDuePosts();
-  res.json({ success: true, data: { published } });
+  try {
+    const published = await publishDuePosts();
+    res.json({ success: true, data: { published } });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message || 'Scheduler error' });
+  }
 });
 
 // Crisis mode — pause/resume all automated publishing without touching post data.
@@ -31,19 +35,18 @@ router.post('/resume-publishing', async (req: AuthedRequest, res) => {
   res.json({ success: true, data: { paused: false } });
 });
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthedRequest, res) => {
   const { status } = req.query;
-  const rows = await prisma.post.findMany({
-    where: status ? { status: String(status) } : undefined,
-    orderBy: { createdAt: 'desc' },
-  });
+  const where: any = { authorId: req.userId };
+  if (status) where.status = String(status);
+  const rows = await prisma.post.findMany({ where, orderBy: { createdAt: 'desc' } });
   const data = rows.map(mapPost);
   res.json({ success: true, data, total: data.length });
 });
 
-router.get('/calendar', async (_req, res) => {
+router.get('/calendar', async (req: AuthedRequest, res) => {
   const rows = await prisma.post.findMany({
-    where: { OR: [{ scheduledAt: { not: null } }, { publishedAt: { not: null } }] },
+    where: { authorId: req.userId, OR: [{ scheduledAt: { not: null } }, { publishedAt: { not: null } }] },
   });
   const data = rows.map((p) => {
     const m = mapPost(p);
@@ -52,8 +55,8 @@ router.get('/calendar', async (_req, res) => {
   res.json({ success: true, data });
 });
 
-router.get('/:id', async (req, res) => {
-  const p = await prisma.post.findUnique({ where: { id: req.params.id } });
+router.get('/:id', async (req: AuthedRequest, res) => {
+  const p = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!p) return res.status(404).json({ success: false, error: 'Post not found' });
   res.json({ success: true, data: mapPost(p) });
 });
@@ -71,6 +74,7 @@ router.post(
       hashtags: hashtags ? toJson(hashtags) : null,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
       publishedAt: status === 'published' ? new Date() : null,
+      authorId: (req as AuthedRequest).userId ?? null,
     },
   });
   res.status(201).json({ success: true, data: mapPost(p) });
@@ -93,8 +97,8 @@ router.post('/bulk', async (req, res) => {
   res.status(201).json({ success: true, data: created, total: created.length });
 });
 
-router.put('/:id', async (req, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+router.put('/:id', async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const b = req.body ?? {};
   const p = await prisma.post.update({
@@ -110,15 +114,15 @@ router.put('/:id', async (req, res) => {
   res.json({ success: true, data: mapPost(p) });
 });
 
-router.delete('/:id', async (req, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+router.delete('/:id', async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   await prisma.post.delete({ where: { id: req.params.id } });
   res.json({ success: true, data: mapPost(exists) });
 });
 
-router.post('/:id/schedule', async (req, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+router.post('/:id/schedule', async (req: AuthedRequest, res) => {
+  const exists = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({
     where: { id: req.params.id },
@@ -132,7 +136,7 @@ router.post('/:id/schedule', async (req, res) => {
 
 // --- Approval workflow ---
 router.post('/:id/submit', async (req: AuthedRequest, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  const exists = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({
     where: { id: req.params.id },
@@ -143,7 +147,7 @@ router.post('/:id/submit', async (req: AuthedRequest, res) => {
 });
 
 router.post('/:id/approve', requirePermission(PERMISSIONS.APPROVE_POST), async (req: AuthedRequest, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });  // approvers can act on any post
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({
     where: { id: req.params.id },
@@ -154,7 +158,7 @@ router.post('/:id/approve', requirePermission(PERMISSIONS.APPROVE_POST), async (
 });
 
 router.post('/:id/reject', requirePermission(PERMISSIONS.APPROVE_POST), async (req: AuthedRequest, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });  // approvers can act on any post
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({
     where: { id: req.params.id },
@@ -165,7 +169,7 @@ router.post('/:id/reject', requirePermission(PERMISSIONS.APPROVE_POST), async (r
 });
 
 router.post('/:id/publish', async (req: AuthedRequest, res) => {
-  const exists = await prisma.post.findUnique({ where: { id: req.params.id } });
+  const exists = await prisma.post.findFirst({ where: { id: req.params.id, authorId: req.userId } });
   if (!exists) return res.status(404).json({ success: false, error: 'Post not found' });
   const p = await prisma.post.update({
     where: { id: req.params.id },

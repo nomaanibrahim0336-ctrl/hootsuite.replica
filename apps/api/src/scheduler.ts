@@ -92,18 +92,24 @@ async function runDuePosts(nowMs: number): Promise<number> {
       }
     }
 
-    await prisma.post.update({
-      where: { id: post.id },
-      data: ok
-        ? {
-            status: 'published',
-            publishedAt: new Date(nowMs),
-            engagements: toJson({ likes: 0, comments: 0, shares: 0, impressions: 0 }),
-          }
-        : { status: 'failed' },
-    });
-    if (ok) published++;
-    console.log(`[scheduler] ${ok ? 'published' : 'FAILED'} post ${post.id}`);
+    try {
+      await prisma.post.update({
+        where: { id: post.id },
+        data: ok
+          ? {
+              status: 'published',
+              publishedAt: new Date(nowMs),
+              engagements: toJson({ likes: 0, comments: 0, shares: 0, impressions: 0 }),
+            }
+          : { status: 'failed' },
+      });
+      if (ok) published++;
+      console.log(`[scheduler] ${ok ? 'published' : 'FAILED'} post ${post.id}`);
+    } catch (e: any) {
+      // P2025: post was deleted between findMany and update — skip it
+      if (e?.code !== 'P2025') throw e;
+      console.log(`[scheduler] skipped missing post ${post.id}`);
+    }
   }
   return published;
 }
