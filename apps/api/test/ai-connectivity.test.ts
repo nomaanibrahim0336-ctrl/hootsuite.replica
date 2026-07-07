@@ -77,6 +77,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  // This suite deliberately sets the active provider to `custom` for its
+  // duration — reset it so later test files (which run in the same process
+  // and DB under --runInBand) don't inherit it.
+  const { prisma } = await import('../src/prisma');
+  await prisma.appSetting.deleteMany({ where: { key: { in: ['llm.provider', 'llm.model'] } } });
+  await prisma.llmCredential.deleteMany({});
   await closeDb();
 });
 

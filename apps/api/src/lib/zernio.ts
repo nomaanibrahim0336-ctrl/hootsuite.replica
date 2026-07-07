@@ -181,6 +181,36 @@ export async function markConversationRead(conversationId: string, accountId: st
   });
 }
 
+// ─── Webhooks — real-time push instead of polling (up to 10 per account) ───────
+
+export interface ZernioWebhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+}
+
+export async function listWebhooks(): Promise<ZernioWebhook[]> {
+  const data = await call<{ webhooks: any[] }>('/webhooks/settings');
+  return (data.webhooks ?? []).map((w: any) => ({
+    id: w._id, name: w.name, url: w.url, events: w.events ?? [], isActive: w.isActive !== false,
+  }));
+}
+
+export async function createWebhook(input: { name: string; url: string; secret: string; events: string[] }): Promise<ZernioWebhook> {
+  const data = await call<{ webhook: any }>('/webhooks/settings', {
+    method: 'POST',
+    body: JSON.stringify({ name: input.name, url: input.url, secret: input.secret, events: input.events, isActive: true }),
+  });
+  const w = data.webhook;
+  return { id: w._id, name: w.name, url: w.url, events: w.events ?? [], isActive: w.isActive !== false };
+}
+
+export async function updateWebhook(id: string, input: { url?: string; secret?: string; events?: string[]; isActive?: boolean }): Promise<void> {
+  await call('/webhooks/settings', { method: 'PUT', body: JSON.stringify({ _id: id, ...input }) });
+}
+
 // ─── Listening — brand mentions & posts generating comments (Inbox addon) ──────
 
 export interface ZernioMention {

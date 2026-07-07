@@ -18,6 +18,7 @@ import auditRoutes from './routes/audit';
 import oauthRoutes from './routes/oauth';
 import ayrshareRoutes from './routes/ayrshare';
 import zernioRoutes from './routes/zernio';
+import webhookRoutes from './routes/webhooks';
 
 export function createApp() {
   const app = express();
@@ -40,12 +41,20 @@ export function createApp() {
     },
     credentials: true,
   }));
-  app.use(express.json({ limit: '2mb' }));
+  // Capture the raw request body alongside Express's parsed JSON — webhook
+  // signatures (e.g. Zernio's X-Zernio-Signature) are computed over the exact
+  // bytes received, which the parsed object can't reliably reproduce.
+  app.use(express.json({
+    limit: '2mb',
+    verify: (req: any, _res, buf) => { req.rawBody = buf; },
+  }));
 
   // Safety net: bound any request (e.g. an unhandled async rejection that never
   // sends a response) to 15s so a stuck handler can't hold the connection open.
+  // Exempts the inbox SSE stream, which is a deliberately long-lived connection.
   if (process.env.NODE_ENV !== 'test') {
-    app.use((_req, res, next) => {
+    app.use((req, res, next) => {
+      if (req.path === '/api/inbox/stream') return next();
       res.setTimeout(15000, () => {
         if (!res.headersSent) res.status(503).json({ success: false, error: 'Request timed out' });
       });
@@ -94,6 +103,7 @@ export function createApp() {
   // Public
   app.use('/api/auth', authRoutes);
   app.use('/api/oauth', oauthRoutes); // OAuth callbacks must be public (no JWT)
+  app.use('/api/webhooks', webhookRoutes); // Third-party callbacks — verified by signature, not a session
 
   // Protected
   app.use('/api/networks', requireAuth, networkRoutes);

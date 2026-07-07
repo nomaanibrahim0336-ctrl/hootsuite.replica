@@ -2,8 +2,38 @@ import { Router } from 'express';
 import { prisma, mapMessage } from '../prisma';
 import * as zernio from '../lib/zernio';
 import { syncZernioInbox } from '../zernioInboxSync';
+import { subscribeInboxEvents, publishInboxEvent } from '../realtime';
 
 const router = Router();
+
+// Live stream — pushes a `message` event the instant a new DM arrives via the
+// Zernio webhook (routes/webhooks.ts), or the instant a reply is sent from
+// any open tab. This is what makes the Inbox feel instant instead of relying
+// on the polling sync. Standard Server-Sent Events: one long-lived GET, no
+// client library needed (the browser's built-in EventSource handles it,
+// including automatic reconnection if the connection drops).
+router.get('/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no', // disable nginx/Railway proxy buffering so events flush immediately
+  });
+  res.write(': connected\n\n');
+
+  const unsubscribe = subscribeInboxEvents((event) => {
+    res.write(`event: ${event.type}\n`);
+    res.write(`data: ${JSON.stringify('data' in event ? event.data : {})}\n\n`);
+  });
+
+  // Keep intermediary proxies from timing out an idle connection.
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
 
 // Explicit, user-triggered "Sync now" — awaited, so the client knows exactly
 // when fresh data has landed instead of guessing with a fixed delay. Bounded
@@ -142,7 +172,9 @@ router.post('/:id/reply', async (req, res) => {
 
   await prisma.messageReply.create({ data: { messageId: m.id, content, isFromUs: true } });
   const updated = await prisma.message.update({ where: { id: m.id }, data: { status: 'resolved' }, include: { replies: true } });
-  res.json({ success: true, data: mapMessage(updated) });
+  const mapped = mapMessage(updated);
+  publishInboxEvent({ type: 'message', data: mapped }); // other open tabs/sessions see the reply instantly too
+  res.json({ success: true, data: mapped });
 });
 
 export default router;

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card, PageHeader, Badge, NetworkChip, Avatar, Button } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/Toast';
-import { api } from '@/lib/api';
+import { api, API_BASE, getToken } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Message, MessageStatus, SavedReply } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -44,6 +44,29 @@ export default function InboxPage() {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Live updates — the backend pushes a `message` event the instant a new DM
+  // arrives (via the Zernio webhook) or a reply is sent from any tab, so new
+  // conversations and replies show up without polling or a manual refresh.
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    const source = new EventSource(`${API_BASE}/api/inbox/stream?token=${encodeURIComponent(token)}`);
+    source.addEventListener('message', (e: MessageEvent) => {
+      let incoming: Message;
+      try { incoming = JSON.parse(e.data); } catch { return; }
+      setList((prev) => {
+        const exists = prev.some((m) => m.id === incoming.id);
+        const next = exists ? prev.map((m) => (m.id === incoming.id ? incoming : m)) : [incoming, ...prev];
+        return next.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      });
+    });
+    source.onerror = () => {
+      // EventSource auto-reconnects on its own; nothing to do here beyond
+      // letting the browser retry. Avoid spamming the user with a toast.
+    };
+    return () => source.close();
   }, []);
 
   // /inbox/sync is awaited server-side (a forced, non-rate-limited Zernio

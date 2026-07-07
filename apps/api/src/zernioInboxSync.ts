@@ -6,13 +6,82 @@
 // doesn't, listConversations() throws and syncZernioInbox() just no-ops (the
 // rest of the app keeps working against whatever is already in the DB).
 
-import { prisma } from './prisma';
+import { prisma, mapMessage } from './prisma';
 import * as zernio from './lib/zernio';
+import { publishInboxEvent } from './realtime';
 
 // Only platforms the frontend's NETWORK_META knows how to render. Zernio's
 // inbox also covers bluesky/reddit/telegram, which this app has no chip/label
 // for — skip those rather than let an unknown network type crash the UI.
-const SUPPORTED_PLATFORMS = new Set(['facebook', 'instagram', 'twitter']);
+export const SUPPORTED_PLATFORMS = new Set(['facebook', 'instagram', 'twitter']);
+
+/** One inbound message delivered by the `message.received` webhook — the
+ *  real-time counterpart to syncOneConversation, applied to a single message
+ *  instead of a full conversation history pull. Used by routes/webhooks.ts.
+ *  Only handles incoming messages: outgoing ones are already written
+ *  optimistically by POST /inbox/:id/reply the instant we send them, so
+ *  handling `message.sent` here too would create a duplicate thread bubble. */
+export async function applyIncomingWebhookMessage(input: {
+  conversationId: string;
+  platformMessageId: string;
+  accountId: string;
+  platform: string;
+  text: string;
+  senderName: string;
+  senderId: string;
+  sentAt: string;
+}): Promise<void> {
+  if (!SUPPORTED_PLATFORMS.has(input.platform)) return;
+
+  const existing = await prisma.message.findUnique({ where: { externalId: input.conversationId } });
+
+  const row = existing
+    ? await prisma.message.update({
+        where: { id: existing.id },
+        data: {
+          isRead: false,
+          status: existing.status === 'resolved' ? 'unread' : existing.status,
+          timestamp: new Date(input.sentAt),
+          accountId: input.accountId,
+        },
+        include: { replies: true },
+      })
+    : await prisma.message.create({
+        data: {
+          externalId: input.conversationId,
+          accountId: input.accountId,
+          network: input.platform,
+          senderName: input.senderName || 'Unknown',
+          senderUser: input.senderId,
+          content: input.text,
+          type: 'dm',
+          status: 'unread',
+          sentiment: 'neutral',
+          isRead: false,
+          timestamp: new Date(input.sentAt),
+        },
+        include: { replies: true },
+      });
+
+  // If this wasn't the opening message, thread it as a reply (dedup by the
+  // platform's message id so a webhook redelivery can't double it up).
+  if (existing) {
+    await prisma.messageReply.upsert({
+      where: { externalId: input.platformMessageId },
+      update: {},
+      create: {
+        externalId: input.platformMessageId,
+        messageId: row.id,
+        content: input.text,
+        isFromUs: false,
+        timestamp: new Date(input.sentAt),
+      },
+    });
+  }
+
+  const full = await prisma.message.findUnique({ where: { id: row.id }, include: { replies: true } });
+  if (full) publishInboxEvent({ type: 'message', data: mapMessage(full) });
+}
 
 let lastSyncAt = 0;
 const MIN_SYNC_INTERVAL_MS = 15_000;

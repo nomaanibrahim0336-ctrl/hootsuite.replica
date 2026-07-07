@@ -38,11 +38,15 @@ export function verifyResetToken(token: string): string | null {
 
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
+  // EventSource (used for the live-inbox stream) can't set custom headers,
+  // so it authenticates via a ?token= query param instead — same JWT,
+  // verified the same way, just a different carrier.
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : (req.query.token as string | undefined);
+  if (!token) {
     return res.status(401).json({ success: false, error: 'Missing or invalid Authorization header' });
   }
   try {
-    const payload = jwt.verify(header.slice(7), JWT_SECRET) as { sub: string };
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
     req.userId = payload.sub;
     next();
   } catch {
