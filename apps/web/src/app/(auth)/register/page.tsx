@@ -3,26 +3,29 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, AlertCircle } from 'lucide-react';
 import { api, setToken, setRefreshToken, startSession } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
     try {
       const res = await api.register(form.email, form.password, form.name);
       setToken(res.accessToken);
       setRefreshToken(res.refreshToken);
-    } catch {
-      // API unavailable — proceed in demo mode.
-    } finally {
       startSession();
       router.push('/dashboard');
+    } catch (err: any) {
+      setError(err?.message || 'Could not create account — the live API may be unreachable.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -42,6 +45,12 @@ export default function RegisterPage() {
         <p className="mt-1 text-slate-500">Start managing all your social channels in one place.</p>
 
         <form onSubmit={submit} className="mt-6 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Full name</label>
             <input value={form.name} onChange={field('name')} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-accent" placeholder="Jane Doe" />

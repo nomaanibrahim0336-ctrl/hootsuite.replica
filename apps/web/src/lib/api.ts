@@ -27,9 +27,9 @@ export function clearRefreshToken() {
   if (typeof window !== 'undefined') localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-// Session marker — set on login/register (even in offline demo mode so the
-// auth guard lets the user in). Independent of the JWT, which only exists
-// when the live API is reachable.
+// Session marker — set only after a real login/register success. AuthGuard
+// treats this as a fast local hint, but always re-validates the access token
+// against the live API before rendering protected content.
 export function startSession() {
   if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, '1');
 }
