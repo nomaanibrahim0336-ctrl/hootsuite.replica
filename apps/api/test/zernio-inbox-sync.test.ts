@@ -51,7 +51,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe('GET /api/inbox syncs real Zernio conversations into Message/MessageReply', () => {
+describe('Zernio inbox sync (fire-and-forget from GET /api/inbox, tested directly for determinism)', () => {
   it('creates a Message row from a Zernio conversation with its opening message as content', async () => {
     const { token } = await authAs();
     mockZernio.listConversations.mockResolvedValue([
@@ -65,6 +65,11 @@ describe('GET /api/inbox syncs real Zernio conversations into Message/MessageRep
       { id: 'msg_1', conversationId: 'conv_1', accountId: 'acct_1', platform: 'instagram', message: 'Hey there!', senderName: 'Jane Doe', direction: 'incoming', createdAt: new Date().toISOString() },
     ]);
 
+    // GET /api/inbox triggers this same sync fire-and-forget in production
+    // (so the response is never slowed down by N calls to Zernio); call it
+    // directly here so the test can deterministically await completion
+    // before asserting, then confirm the read path serves it correctly.
+    await syncZernioInbox();
     const res = await request(app).get('/api/inbox').set(bearer(token));
     expect(res.status).toBe(200);
 
@@ -75,7 +80,6 @@ describe('GET /api/inbox syncs real Zernio conversations into Message/MessageRep
   });
 
   it('maps outgoing/incoming messages after the first into the thread with the right isFromUs', async () => {
-    const { token } = await authAs();
     mockZernio.listConversations.mockResolvedValue([
       {
         id: 'conv_2', platform: 'twitter', accountId: 'acct_2', accountUsername: 'brand',
@@ -89,10 +93,9 @@ describe('GET /api/inbox syncs real Zernio conversations into Message/MessageRep
       { id: 'msg_c', conversationId: 'conv_2', accountId: 'acct_2', platform: 'twitter', message: 'thanks!', senderName: 'Bob', direction: 'incoming', createdAt: new Date().toISOString() },
     ]);
 
-    await request(app).get('/api/inbox').set(bearer(token));
+    await syncZernioInbox();
 
-    const { prisma: p } = await import('../src/prisma');
-    const row = await p.message.findUnique({ where: { externalId: 'conv_2' }, include: { replies: true } });
+    const row = await prisma.message.findUnique({ where: { externalId: 'conv_2' }, include: { replies: true } });
     expect(row).toBeTruthy();
     expect(row!.content).toBe('Hi, question about pricing');
     expect(row!.replies).toHaveLength(2);
@@ -129,7 +132,6 @@ describe('GET /api/inbox syncs real Zernio conversations into Message/MessageRep
   });
 
   it('skips conversations on platforms the app has no chip/label for (e.g. reddit, telegram)', async () => {
-    const { token } = await authAs();
     mockZernio.listConversations.mockResolvedValue([
       {
         id: 'conv_unsupported', platform: 'reddit', accountId: 'acct_9', accountUsername: 'brand',
@@ -138,19 +140,34 @@ describe('GET /api/inbox syncs real Zernio conversations into Message/MessageRep
       },
     ]);
 
-    await request(app).get('/api/inbox').set(bearer(token));
+    await syncZernioInbox();
     expect(mockZernio.listConversationMessages).not.toHaveBeenCalled();
     const row = await prisma.message.findUnique({ where: { externalId: 'conv_unsupported' } });
     expect(row).toBeNull();
   });
 
-  it('does not break GET /inbox if listConversations throws (e.g. Inbox addon not enabled)', async () => {
-    const { token } = await authAs();
+  it('does not throw if listConversations fails (e.g. Inbox addon not enabled)', async () => {
     mockZernio.listConversations.mockRejectedValue(new Error('Zernio error 403: Inbox addon required'));
+    await expect(syncZernioInbox()).resolves.toBeUndefined();
+  });
+
+  it('GET /api/inbox responds without waiting on the Zernio sync to finish', async () => {
+    const { token } = await authAs();
+    // Hold listConversations pending indefinitely — if the route awaited the
+    // sync before responding (the earlier, buggy version of this code), this
+    // request would hang. Resolve it at the end so no state leaks into later
+    // tests via the sync module's shared in-flight-promise cache.
+    let releaseSync!: () => void;
+    mockZernio.listConversations.mockImplementation(
+      () => new Promise((resolve) => { releaseSync = () => resolve([]); })
+    );
 
     const res = await request(app).get('/api/inbox').set(bearer(token));
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(mockZernio.listConversations).toHaveBeenCalled();
+
+    releaseSync();
+    await syncZernioInbox().catch(() => {}); // let the in-flight sync settle before the next test
   });
 });
 

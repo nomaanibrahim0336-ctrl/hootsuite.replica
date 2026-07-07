@@ -74,6 +74,8 @@ async function syncOneConversation(conv: zernio.ZernioConversation): Promise<voi
   }
 }
 
+const SYNC_BATCH_SIZE = 5;
+
 async function runSync(): Promise<void> {
   let conversations: zernio.ZernioConversation[];
   try {
@@ -84,9 +86,11 @@ async function runSync(): Promise<void> {
     return;
   }
 
-  for (const conv of conversations) {
-    if (!SUPPORTED_PLATFORMS.has(conv.platform)) continue;
-    await syncOneConversation(conv);
+  const targets = conversations.filter((c) => SUPPORTED_PLATFORMS.has(c.platform));
+  // Bounded-concurrency batches — much faster than fully sequential without
+  // firing dozens of simultaneous requests at Zernio's rate limits.
+  for (let i = 0; i < targets.length; i += SYNC_BATCH_SIZE) {
+    await Promise.all(targets.slice(i, i + SYNC_BATCH_SIZE).map((conv) => syncOneConversation(conv)));
   }
 }
 

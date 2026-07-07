@@ -6,11 +6,14 @@ import { syncZernioInbox } from '../zernioInboxSync';
 const router = Router();
 
 router.get('/', async (req, res) => {
-  try {
-    await syncZernioInbox();
-  } catch (e: any) {
-    console.error('[inbox] Zernio sync failed:', e.message);
-  }
+  // Fire-and-forget: with real accounts this can make several sequential
+  // calls to Zernio (one per conversation) and must never block the
+  // response — awaiting it here risked tripping the server's global 15s
+  // request timeout once there were more than a handful of conversations.
+  // Data lags by at most one request; that's an acceptable trade for a
+  // response that's always fast.
+  syncZernioInbox().catch((e: any) => console.error('[inbox] Zernio sync failed:', e.message));
+
   const { status, network } = req.query;
   const rows = await prisma.message.findMany({
     where: {
