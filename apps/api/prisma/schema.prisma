@@ -159,6 +159,10 @@ model Mention {
   comments    Int      @default(0)
   timestamp   DateTime @default(now())
 
+  // Set when synced from a live provider (e.g. Zernio) — the provider's
+  // mention/comment id, used to dedupe across repeated syncs.
+  externalId String? @unique
+
   stream   Stream? @relation(fields: [streamId], references: [id])
   streamId String?
 }

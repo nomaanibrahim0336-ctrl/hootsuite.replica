@@ -18,7 +18,7 @@ import { toast } from '@/components/Toast';
 import { cn, formatNumber, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Stream, NetworkType, Mention, SentimentPoint } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, Radio, Heart, Repeat2, MessageCircle, Pencil, Trash2, Download, Loader2 } from 'lucide-react';
+import { Plus, Radio, Heart, Repeat2, MessageCircle, Pencil, Trash2, Download, Loader2, RefreshCw } from 'lucide-react';
 
 export default function ListeningPage() {
   const [streams, setStreams] = useState<Stream[]>([]);
@@ -57,6 +57,8 @@ export default function ListeningPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // Clicking a stream filters the mentions feed to that stream.
   const selectStream = async (id: string) => {
     setActive(id);
@@ -65,6 +67,24 @@ export default function ListeningPage() {
       setFeed(rows ?? []);
     } catch {
       // API unreachable — keep the current feed.
+    }
+  };
+
+  // Pull the latest feed. The first request kicks off the (fire-and-forget)
+  // Zernio sync server-side; a second fetch a moment later surfaces it.
+  const refreshFeed = async () => {
+    setRefreshing(true);
+    try {
+      await api.getMentions(active);           // triggers server-side sync
+      await new Promise((r) => setTimeout(r, 1200));
+      const [rows, streamsRes] = await Promise.all([api.getMentions(active), api.getStreams()]);
+      setFeed(rows ?? []);
+      setStreams(streamsRes ?? []);
+      toast.success('Mentions refreshed');
+    } catch {
+      toast.error('Could not refresh — live API unreachable');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -287,6 +307,12 @@ export default function ListeningPage() {
         <CardHeader
           title="Mentions feed"
           subtitle={active ? 'Showing mentions for the selected stream' : 'Latest conversations about your brand'}
+          action={
+            <Button variant="secondary" size="sm" onClick={refreshFeed} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Refresh
+            </Button>
+          }
         />
         <div className="divide-y divide-slate-100">
           {feedForActive.length === 0 && (

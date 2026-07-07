@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma, mapStream, mapMention, toJson } from '../prisma';
 import { sentimentTrend } from '../analytics';
 import { classifySentiment } from '../sentiment';
+import { syncZernioListening } from '../zernioListeningSync';
 
 const router = Router();
 
@@ -100,6 +101,11 @@ router.delete('/streams/:id', async (req, res) => {
 });
 
 router.get('/mentions', async (req, res) => {
+  // Fire-and-forget: pull fresh brand mentions/comments from Zernio without
+  // blocking the response (mirrors the inbox sync). Data lags by at most one
+  // request.
+  syncZernioListening().catch((e: any) => console.error('[listening] Zernio sync failed:', e.message));
+
   const { streamId, sentiment } = req.query;
   const rows = await prisma.mention.findMany({
     where: {

@@ -181,6 +181,67 @@ export async function markConversationRead(conversationId: string, accountId: st
   });
 }
 
+// ─── Listening — brand mentions & posts generating comments (Inbox addon) ──────
+
+export interface ZernioMention {
+  id: string;
+  platform: string;
+  accountUsername: string;
+  authorName: string;
+  content: string;
+  permalink?: string;
+  publishedAt: string;
+}
+
+export interface ZernioCommentedPost {
+  id: string;
+  platform: string;
+  accountUsername: string;
+  content: string;
+  permalink?: string;
+  createdTime: string;
+  commentCount: number;
+  likeCount: number;
+}
+
+/** Brand mentions of your connected org accounts (currently LinkedIn). */
+export async function listMentions(): Promise<ZernioMention[]> {
+  const data = await call<{ data: any[] }>('/inbox/mentions?limit=50');
+  return (data.data ?? []).map((m: any) => ({
+    id: m.id,
+    platform: m.platform,
+    accountUsername: m.accountUsername ?? '',
+    authorName: friendlyAuthor(m.authorUrn),
+    content: m.content ?? '',
+    permalink: m.permalink ?? undefined,
+    publishedAt: m.publishedAt ?? m.createdAt ?? new Date().toISOString(),
+  }));
+}
+
+/** Your posts that are generating comments across connected accounts. */
+export async function listCommentedPosts(): Promise<ZernioCommentedPost[]> {
+  const data = await call<{ data: any[] }>('/inbox/comments?limit=50&sortBy=comments&sortOrder=desc');
+  return (data.data ?? [])
+    .filter((p: any) => !p.isAd) // skip paid/dark-post rows — organic conversation only
+    .map((p: any) => ({
+      id: p.id,
+      platform: p.platform,
+      accountUsername: p.accountUsername ?? '',
+      content: p.content ?? '',
+      permalink: p.permalink ?? undefined,
+      createdTime: p.createdTime ?? new Date().toISOString(),
+      commentCount: p.commentCount ?? 0,
+      likeCount: p.likeCount ?? 0,
+    }));
+}
+
+/** LinkedIn mentions only carry an author URN; derive a readable handle. */
+function friendlyAuthor(urn?: string | null): string {
+  if (!urn) return 'LinkedIn member';
+  const tail = String(urn).split(':').pop() ?? '';
+  return tail ? `@${tail.slice(0, 16)}` : 'LinkedIn member';
+}
+
 /** Disconnect a social account.
  *  Accepts either a Zernio accountId (24-char hex) or a platform name (slower — requires a listAccounts lookup). */
 export async function disconnect(accountIdOrPlatform: string): Promise<void> {

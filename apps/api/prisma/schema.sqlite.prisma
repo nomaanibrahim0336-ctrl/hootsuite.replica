@@ -154,6 +154,8 @@ model Mention {
   comments    Int      @default(0)
   timestamp   DateTime @default(now())
 
+  externalId String? @unique
+
   stream   Stream? @relation(fields: [streamId], references: [id])
   streamId String?
 }
