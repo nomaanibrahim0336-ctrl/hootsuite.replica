@@ -12,12 +12,13 @@ import {
   Legend,
 } from 'recharts';
 import { Card, CardHeader, PageHeader, Button, Badge, NetworkChip, Avatar } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { api } from '@/lib/api';
 import { toast } from '@/components/Toast';
 import { cn, formatNumber, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Stream, NetworkType, Mention, SentimentPoint } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, Radio, Heart, Repeat2, MessageCircle } from 'lucide-react';
+import { Plus, Radio, Heart, Repeat2, MessageCircle, Pencil, Trash2, Download, Loader2 } from 'lucide-react';
 
 export default function ListeningPage() {
   const [streams, setStreams] = useState<Stream[]>([]);
@@ -27,6 +28,12 @@ export default function ListeningPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [keywords, setKeywords] = useState('');
+
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editKeywords, setEditKeywords] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [ingestingId, setIngestingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,9 +57,21 @@ export default function ListeningPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const total = feed.length;
-  const pos = feed.filter((m) => m.sentiment === 'positive').length;
-  const neg = feed.filter((m) => m.sentiment === 'negative').length;
+  // Clicking a stream filters the mentions feed to that stream.
+  const selectStream = async (id: string) => {
+    setActive(id);
+    try {
+      const rows = await api.getMentions(id);
+      setFeed(rows ?? []);
+    } catch {
+      // API unreachable — keep the current feed.
+    }
+  };
+
+  const feedForActive = active ? feed.filter((m) => !m.streamId || m.streamId === active) : feed;
+  const total = feedForActive.length;
+  const pos = feedForActive.filter((m) => m.sentiment === 'positive').length;
+  const neg = feedForActive.filter((m) => m.sentiment === 'negative').length;
 
   const addStream = async () => {
     if (!name.trim()) return;
@@ -75,6 +94,57 @@ export default function ListeningPage() {
       setStreams((l: Stream[]) => [created, ...l.filter((x) => x.id !== s.id)]);
     } catch {
       // API unreachable — locally created stream stands as the offline result.
+    }
+  };
+
+  const startEdit = (s: Stream) => {
+    setEditId(s.id);
+    setEditName(s.name);
+    setEditKeywords(s.keywords.join(', '));
+  };
+
+  const saveEdit = async () => {
+    if (!editId) return;
+    const kw = editKeywords.split(',').map((k) => k.trim()).filter(Boolean);
+    setStreams((l) => l.map((s) => (s.id === editId ? { ...s, name: editName, keywords: kw } : s)));
+    const id = editId;
+    setEditId(null);
+    try {
+      const updated = (await api.updateStream(id, { name: editName, keywords: kw })) as Stream;
+      setStreams((l) => l.map((s) => (s.id === id ? updated : s)));
+      toast.success('Stream updated');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not update stream');
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+    setStreams((l) => l.filter((s) => s.id !== id));
+    if (active === id) setActive(undefined);
+    try {
+      await api.deleteStream(id);
+      toast.success('Stream deleted');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not delete stream');
+    }
+  };
+
+  const pullMentions = async (id: string) => {
+    setIngestingId(id);
+    try {
+      await api.ingestStream(id, 5);
+      const [rows, streamsRes] = await Promise.all([api.getMentions(id), api.getStreams()]);
+      setFeed(rows ?? []);
+      setStreams(streamsRes ?? []);
+      setActive(id);
+      toast.success('Pulled 5 fresh mentions');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not pull mentions');
+    } finally {
+      setIngestingId(null);
     }
   };
 
@@ -124,22 +194,71 @@ export default function ListeningPage() {
           <CardHeader title="Streams" />
           <div className="divide-y divide-slate-100">
             {streams.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setActive(s.id)}
-                className={cn('flex w-full items-start gap-3 px-5 py-3 text-left', active === s.id ? 'bg-accent-light/50' : 'hover:bg-slate-50')}
-              >
-                <Radio className={cn('mt-0.5 h-4 w-4', s.isActive ? 'text-accent-deep' : 'text-slate-300')} />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-slate-800">{s.name}</p>
-                    {s.isActive ? <Badge color="green">Live</Badge> : <Badge>Paused</Badge>}
+              <div key={s.id} className={cn('px-5 py-3', active === s.id && 'bg-accent-light/50')}>
+                {editId === s.id ? (
+                  <div className="space-y-2">
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Stream name"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-accent"
+                    />
+                    <input
+                      value={editKeywords}
+                      onChange={(e) => setEditKeywords(e.target.value)}
+                      placeholder="Keywords, comma separated"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-accent"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setEditId(null)}>Cancel</Button>
+                      <Button size="sm" onClick={saveEdit}>Save</Button>
+                    </div>
                   </div>
-                  <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{s.keywords.join(', ')}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">{formatNumber(s.mentionCount)} mentions</p>
-                </div>
-              </button>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <button onClick={() => selectStream(s.id)} className="flex flex-1 items-start gap-3 text-left">
+                      <Radio className={cn('mt-0.5 h-4 w-4', s.isActive ? 'text-accent-deep' : 'text-slate-300')} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-slate-800">{s.name}</p>
+                          {s.isActive ? <Badge color="green">Live</Badge> : <Badge>Paused</Badge>}
+                        </div>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{s.keywords.join(', ')}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">{formatNumber(s.mentionCount)} mentions</p>
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => pullMentions(s.id)}
+                        disabled={ingestingId === s.id}
+                        aria-label="Pull mentions"
+                        title="Pull fresh mentions"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-accent-deep disabled:opacity-50"
+                      >
+                        {ingestingId === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => startEdit(s)}
+                        aria-label="Edit stream"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteId(s.id)}
+                        aria-label="Delete stream"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-negative"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
+            {streams.length === 0 && (
+              <p className="px-5 py-8 text-center text-sm text-slate-400">No streams yet. Click "New Stream" to start monitoring.</p>
+            )}
           </div>
         </Card>
 
@@ -165,9 +284,17 @@ export default function ListeningPage() {
 
       {/* Mentions feed */}
       <Card className="mt-6">
-        <CardHeader title="Mentions feed" subtitle="Latest conversations about your brand" />
+        <CardHeader
+          title="Mentions feed"
+          subtitle={active ? 'Showing mentions for the selected stream' : 'Latest conversations about your brand'}
+        />
         <div className="divide-y divide-slate-100">
-          {feed.map((m) => {
+          {feedForActive.length === 0 && (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              No mentions yet. Use the ⬇ button on a stream to pull some in.
+            </p>
+          )}
+          {feedForActive.map((m) => {
             const sm = SENTIMENT_META[m.sentiment];
             return (
               <div key={m.id} className="flex gap-3 px-5 py-4">
@@ -198,6 +325,15 @@ export default function ListeningPage() {
           })}
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        title="Delete stream?"
+        message="This removes the stream and all mentions collected for it. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   );
 }

@@ -487,6 +487,49 @@ describe('Inbox: saved replies', () => {
       .send({ title: 'No content' });
     expect(res.status).toBe(400);
   });
+
+  it('view a saved reply by id', async () => {
+    const created = await request(app).post('/api/inbox/saved-replies').set(bearer(token))
+      .send({ title: 'View me', content: 'body' });
+    const res = await request(app).get(`/api/inbox/saved-replies/${created.body.data.id}`).set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('View me');
+  });
+
+  it('view non-existent saved reply returns 404', async () => {
+    const res = await request(app).get('/api/inbox/saved-replies/00000000-0000-0000-0000-000000000099').set(bearer(token));
+    expect(res.status).toBe(404);
+  });
+
+  it('edit a saved reply', async () => {
+    const created = await request(app).post('/api/inbox/saved-replies').set(bearer(token))
+      .send({ title: 'Old', content: 'old body' });
+    const res = await request(app).put(`/api/inbox/saved-replies/${created.body.data.id}`).set(bearer(token))
+      .send({ title: 'New', content: 'new body' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('New');
+    expect(res.body.data.content).toBe('new body');
+  });
+
+  it('edit non-existent saved reply returns 404', async () => {
+    const res = await request(app).put('/api/inbox/saved-replies/00000000-0000-0000-0000-000000000099').set(bearer(token))
+      .send({ title: 'X' });
+    expect(res.status).toBe(404);
+  });
+
+  it('delete a saved reply', async () => {
+    const created = await request(app).post('/api/inbox/saved-replies').set(bearer(token))
+      .send({ title: 'Delete me', content: 'body' });
+    const del = await request(app).delete(`/api/inbox/saved-replies/${created.body.data.id}`).set(bearer(token));
+    expect(del.status).toBe(200);
+    const gone = await request(app).get(`/api/inbox/saved-replies/${created.body.data.id}`).set(bearer(token));
+    expect(gone.status).toBe(404);
+  });
+
+  it('delete non-existent saved reply returns 404', async () => {
+    const res = await request(app).delete('/api/inbox/saved-replies/00000000-0000-0000-0000-000000000099').set(bearer(token));
+    expect(res.status).toBe(404);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -576,6 +619,57 @@ describe('Listening: streams and mentions', () => {
     expect(res.body.data.summary).toHaveProperty('negative');
     expect(res.body.data.summary).toHaveProperty('neutral');
     expect(res.body.data.trend).toBeTruthy();
+  });
+
+  it('view a stream by id', async () => {
+    const stream = await seedStream();
+    const res = await request(app).get(`/api/listening/streams/${stream.id}`).set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.id).toBe(stream.id);
+  });
+
+  it('view non-existent stream returns 404', async () => {
+    const res = await request(app).get('/api/listening/streams/00000000-0000-0000-0000-000000000099').set(bearer(token));
+    expect(res.status).toBe(404);
+  });
+
+  it('edit a stream name and keywords', async () => {
+    const stream = await seedStream();
+    const res = await request(app).put(`/api/listening/streams/${stream.id}`).set(bearer(token))
+      .send({ name: 'Renamed Stream', keywords: ['alpha', 'beta'] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe('Renamed Stream');
+    expect(res.body.data.keywords).toEqual(['alpha', 'beta']);
+  });
+
+  it('edit stream accepts comma-separated keywords string', async () => {
+    const stream = await seedStream();
+    const res = await request(app).put(`/api/listening/streams/${stream.id}`).set(bearer(token))
+      .send({ keywords: 'one, two, three' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.keywords).toEqual(['one', 'two', 'three']);
+  });
+
+  it('edit non-existent stream returns 404', async () => {
+    const res = await request(app).put('/api/listening/streams/00000000-0000-0000-0000-000000000099').set(bearer(token))
+      .send({ name: 'X' });
+    expect(res.status).toBe(404);
+  });
+
+  it('delete a stream also removes its mentions (no FK error)', async () => {
+    const stream = await seedStream();
+    await request(app).post(`/api/listening/streams/${stream.id}/ingest`).set(bearer(token)).send({ count: 3 });
+    const del = await request(app).delete(`/api/listening/streams/${stream.id}`).set(bearer(token));
+    expect(del.status).toBe(200);
+    const gone = await request(app).get(`/api/listening/streams/${stream.id}`).set(bearer(token));
+    expect(gone.status).toBe(404);
+    const mentions = await request(app).get(`/api/listening/mentions?streamId=${stream.id}`).set(bearer(token));
+    expect(mentions.body.data.length).toBe(0);
+  });
+
+  it('delete non-existent stream returns 404', async () => {
+    const res = await request(app).delete('/api/listening/streams/00000000-0000-0000-0000-000000000099').set(bearer(token));
+    expect(res.status).toBe(404);
   });
 });
 
@@ -863,6 +957,61 @@ describe('Advocacy: content and shares', () => {
     expect(typeof res.body.data.totalShares).toBe('number');
     expect(typeof res.body.data.totalReach).toBe('number');
     expect(Array.isArray(res.body.data.leaderboard)).toBe(true);
+  });
+
+  it('view content item by id with shareCount', async () => {
+    const content = await seedAdvocacy();
+    const res = await request(app).get(`/api/advocacy/content/${content.id}`).set(bearer(ownerToken));
+    expect(res.status).toBe(200);
+    expect(res.body.data.id).toBe(content.id);
+    expect(typeof res.body.data.shareCount).toBe('number');
+  });
+
+  it('view non-existent content returns 404', async () => {
+    const res = await request(app).get('/api/advocacy/content/00000000-0000-0000-0000-000000000099').set(bearer(ownerToken));
+    expect(res.status).toBe(404);
+  });
+
+  it('edit content (owner) updates fields', async () => {
+    const content = await seedAdvocacy();
+    const res = await request(app).put(`/api/advocacy/content/${content.id}`).set(bearer(ownerToken))
+      .send({ title: 'Edited title', category: 'Updated' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('Edited title');
+    expect(res.body.data.category).toBe('Updated');
+  });
+
+  it('edit content without permission returns 403 (viewer)', async () => {
+    const content = await seedAdvocacy();
+    const res = await request(app).put(`/api/advocacy/content/${content.id}`).set(bearer(viewerToken))
+      .send({ title: 'Nope' });
+    expect(res.status).toBe(403);
+  });
+
+  it('edit non-existent content returns 404', async () => {
+    const res = await request(app).put('/api/advocacy/content/00000000-0000-0000-0000-000000000099').set(bearer(ownerToken))
+      .send({ title: 'X' });
+    expect(res.status).toBe(404);
+  });
+
+  it('delete content (owner) and its shares cascade', async () => {
+    const content = await seedAdvocacy();
+    await request(app).post(`/api/advocacy/content/${content.id}/share`).set(bearer(ownerToken)).send({});
+    const del = await request(app).delete(`/api/advocacy/content/${content.id}`).set(bearer(ownerToken));
+    expect(del.status).toBe(200);
+    const gone = await request(app).get(`/api/advocacy/content/${content.id}`).set(bearer(ownerToken));
+    expect(gone.status).toBe(404);
+  });
+
+  it('delete content without permission returns 403 (viewer)', async () => {
+    const content = await seedAdvocacy();
+    const res = await request(app).delete(`/api/advocacy/content/${content.id}`).set(bearer(viewerToken));
+    expect(res.status).toBe(403);
+  });
+
+  it('delete non-existent content returns 404', async () => {
+    const res = await request(app).delete('/api/advocacy/content/00000000-0000-0000-0000-000000000099').set(bearer(ownerToken));
+    expect(res.status).toBe(404);
   });
 });
 

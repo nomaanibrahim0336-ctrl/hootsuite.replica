@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Message, MessageStatus, SavedReply } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2 } from 'lucide-react';
+import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2, Pencil, Trash2, Plus, X } from 'lucide-react';
 
 const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolved'];
 
@@ -21,6 +21,12 @@ export default function InboxPage() {
   const [note, setNote] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+
+  // Saved-reply management
+  const [managingReplies, setManagingReplies] = useState(false);
+  const [srTitle, setSrTitle] = useState('');
+  const [srContent, setSrContent] = useState('');
+  const [srEditingId, setSrEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +92,40 @@ export default function InboxPage() {
     api.replyMessage(active.id, content).catch(() => {
       // API unreachable — local reply stands as the offline result.
     });
+  };
+
+  // --- Saved-reply CRUD ---
+  const resetSrForm = () => { setSrTitle(''); setSrContent(''); setSrEditingId(null); };
+
+  const submitSavedReply = async () => {
+    if (!srTitle.trim() || !srContent.trim()) return toast.error('Title and content are required');
+    try {
+      if (srEditingId) {
+        const updated = (await api.updateSavedReply(srEditingId, { title: srTitle, content: srContent })) as SavedReply;
+        setSavedReplies((l) => l.map((r) => (r.id === srEditingId ? updated : r)));
+        toast.success('Saved reply updated');
+      } else {
+        const created = (await api.createSavedReply({ title: srTitle, content: srContent })) as SavedReply;
+        setSavedReplies((l) => [...l, created]);
+        toast.success('Saved reply added');
+      }
+      resetSrForm();
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save reply');
+    }
+  };
+
+  const editSavedReply = (r: SavedReply) => { setSrEditingId(r.id); setSrTitle(r.title); setSrContent(r.content); };
+
+  const deleteSavedReply = async (id: string) => {
+    setSavedReplies((l) => l.filter((r) => r.id !== id));
+    if (srEditingId === id) resetSrForm();
+    try {
+      await api.deleteSavedReply(id);
+      toast.info('Saved reply deleted');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not delete reply');
+    }
   };
 
   return (
@@ -169,9 +209,42 @@ export default function InboxPage() {
                     AI suggest
                   </button>
                   {savedReplies.map((sr) => (
-                    <button key={sr.id} onClick={() => setReply(sr.content)} className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent-deep">{sr.title}</button>
+                    <span key={sr.id} className="group inline-flex items-center overflow-hidden rounded-full border border-slate-200 text-xs text-slate-600 hover:border-accent">
+                      <button onClick={() => setReply(sr.content)} title={sr.content} className="px-3 py-1 hover:text-accent-deep">{sr.title}</button>
+                      {managingReplies && (
+                        <>
+                          <button onClick={() => editSavedReply(sr)} aria-label={`Edit ${sr.title}`} className="border-l border-slate-200 px-1.5 py-1 text-slate-400 hover:text-slate-700"><Pencil className="h-3 w-3" /></button>
+                          <button onClick={() => deleteSavedReply(sr.id)} aria-label={`Delete ${sr.title}`} className="border-l border-slate-200 px-1.5 py-1 text-slate-400 hover:text-negative"><Trash2 className="h-3 w-3" /></button>
+                        </>
+                      )}
+                    </span>
                   ))}
+                  <button
+                    onClick={() => { setManagingReplies((v) => !v); resetSrForm(); }}
+                    className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    {managingReplies ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                    {managingReplies ? 'Done' : 'Manage'}
+                  </button>
                 </div>
+                {managingReplies && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      value={srTitle}
+                      onChange={(e) => setSrTitle(e.target.value)}
+                      placeholder="Title"
+                      className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-xs outline-none focus:border-accent"
+                    />
+                    <input
+                      value={srContent}
+                      onChange={(e) => setSrContent(e.target.value)}
+                      placeholder="Reply text"
+                      className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs outline-none focus:border-accent"
+                    />
+                    <Button size="sm" onClick={submitSavedReply}>{srEditingId ? 'Update' : 'Add'}</Button>
+                    {srEditingId && <Button variant="secondary" size="sm" onClick={resetSrForm}>Cancel</Button>}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 border-t border-slate-100 p-3">

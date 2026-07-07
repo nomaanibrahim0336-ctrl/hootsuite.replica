@@ -39,6 +39,36 @@ router.post('/saved-replies', async (req, res) => {
   res.status(201).json({ success: true, data: reply });
 });
 
+// View a single saved reply.
+router.get('/saved-replies/:id', async (req, res) => {
+  const reply = await prisma.savedReply.findUnique({ where: { id: req.params.id } });
+  if (!reply) return res.status(404).json({ success: false, error: 'Saved reply not found' });
+  res.json({ success: true, data: reply });
+});
+
+// Edit a saved reply.
+router.put('/saved-replies/:id', async (req, res) => {
+  const exists = await prisma.savedReply.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Saved reply not found' });
+  const { title, content } = req.body ?? {};
+  const reply = await prisma.savedReply.update({
+    where: { id: req.params.id },
+    data: {
+      ...(title !== undefined ? { title } : {}),
+      ...(content !== undefined ? { content } : {}),
+    },
+  });
+  res.json({ success: true, data: reply });
+});
+
+// Delete a saved reply.
+router.delete('/saved-replies/:id', async (req, res) => {
+  const exists = await prisma.savedReply.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Saved reply not found' });
+  await prisma.savedReply.delete({ where: { id: req.params.id } });
+  res.json({ success: true, data: exists });
+});
+
 router.put('/:id/read', async (req, res) => {
   const m = await prisma.message.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Message not found' });

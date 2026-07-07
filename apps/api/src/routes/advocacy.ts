@@ -27,6 +27,45 @@ router.post('/content', requirePermission(PERMISSIONS.MANAGE_ADVOCACY), async (r
   res.status(201).json({ success: true, data: c });
 });
 
+// View a single content item (with its share count).
+router.get('/content/:id', async (req, res) => {
+  const c: any = await prisma.advocacyContent.findUnique({
+    where: { id: req.params.id },
+    include: { _count: { select: { shares: true } } },
+  });
+  if (!c) return res.status(404).json({ success: false, error: 'Content not found' });
+  res.json({
+    success: true,
+    data: { id: c.id, title: c.title, body: c.body, category: c.category, shareCount: c._count.shares, createdAt: c.createdAt },
+  });
+});
+
+// Edit a content item.
+router.put('/content/:id', requirePermission(PERMISSIONS.MANAGE_ADVOCACY), async (req: AuthedRequest, res) => {
+  const exists = await prisma.advocacyContent.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Content not found' });
+  const b = req.body ?? {};
+  const c = await prisma.advocacyContent.update({
+    where: { id: req.params.id },
+    data: {
+      ...(b.title !== undefined ? { title: b.title } : {}),
+      ...(b.body !== undefined ? { body: b.body } : {}),
+      ...(b.category !== undefined ? { category: b.category } : {}),
+    },
+  });
+  await logAudit(req.userId, 'advocacy.update', 'advocacyContent', c.id);
+  res.json({ success: true, data: c });
+});
+
+// Delete a content item (its shares cascade).
+router.delete('/content/:id', requirePermission(PERMISSIONS.MANAGE_ADVOCACY), async (req: AuthedRequest, res) => {
+  const exists = await prisma.advocacyContent.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Content not found' });
+  await prisma.advocacyContent.delete({ where: { id: req.params.id } });
+  await logAudit(req.userId, 'advocacy.delete', 'advocacyContent', req.params.id);
+  res.json({ success: true, data: exists });
+});
+
 // One-click share by an employee.
 router.post('/content/:id/share', async (req: AuthedRequest, res) => {
   const content = await prisma.advocacyContent.findUnique({ where: { id: req.params.id } });

@@ -209,10 +209,20 @@ export const api = {
   assignMessage: (id: string, assignedTo: string) =>
     request(`/inbox/${id}/assign`, { method: 'PUT', body: JSON.stringify({ assignedTo }) }),
   getSavedReplies: () => request<any[]>('/inbox/saved-replies'),
+  createSavedReply: (payload: { title: string; content: string }) =>
+    request('/inbox/saved-replies', { method: 'POST', body: JSON.stringify(payload) }),
+  updateSavedReply: (id: string, payload: { title?: string; content?: string }) =>
+    request(`/inbox/saved-replies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteSavedReply: (id: string) => request(`/inbox/saved-replies/${id}`, { method: 'DELETE' }),
 
   // Listening
   getStreams: () => request<any[]>('/listening/streams'),
+  getStream: (id: string) => request<any>(`/listening/streams/${id}`),
   createStream: (payload: any) => request('/listening/streams', { method: 'POST', body: JSON.stringify(payload) }),
+  updateStream: (id: string, payload: any) => request(`/listening/streams/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteStream: (id: string) => request(`/listening/streams/${id}`, { method: 'DELETE' }),
+  ingestStream: (id: string, count = 5) =>
+    request(`/listening/streams/${id}/ingest`, { method: 'POST', body: JSON.stringify({ count }) }),
   getMentions: (streamId?: string) => request<any[]>(`/listening/mentions${streamId ? `?streamId=${streamId}` : ''}`),
   getSentiment: () => request<any>('/listening/sentiment'),
 
@@ -288,6 +298,12 @@ export const api = {
 
   // Advocacy (Amplify)
   getAdvocacyContent: () => request<any[]>('/advocacy/content'),
+  getAdvocacyItem: (id: string) => request<any>(`/advocacy/content/${id}`),
+  createAdvocacyContent: (payload: { title: string; body: string; category?: string }) =>
+    request<any>('/advocacy/content', { method: 'POST', body: JSON.stringify(payload) }),
+  updateAdvocacyContent: (id: string, payload: { title?: string; body?: string; category?: string }) =>
+    request<any>(`/advocacy/content/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteAdvocacyContent: (id: string) => request(`/advocacy/content/${id}`, { method: 'DELETE' }),
   getAdvocacyAnalytics: () => request<{ totalShares: number; totalReach: number; leaderboard: any[] }>('/advocacy/analytics'),
   shareAdvocacyContent: (id: string, payload: any) =>
     request(`/advocacy/content/${id}/share`, { method: 'POST', body: JSON.stringify(payload) }),

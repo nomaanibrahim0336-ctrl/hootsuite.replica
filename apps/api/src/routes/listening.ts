@@ -60,6 +60,45 @@ router.post('/streams/:id/ingest', async (req, res) => {
   res.status(201).json({ success: true, data: created, total: created.length });
 });
 
+// View a single stream.
+router.get('/streams/:id', async (req, res) => {
+  const stream = await prisma.stream.findUnique({ where: { id: req.params.id } });
+  if (!stream) return res.status(404).json({ success: false, error: 'Stream not found' });
+  res.json({ success: true, data: mapStream(stream) });
+});
+
+// Edit a stream (name, keywords, sources, active state).
+router.put('/streams/:id', async (req, res) => {
+  const exists = await prisma.stream.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Stream not found' });
+  const b = req.body ?? {};
+  const kw = b.keywords === undefined
+    ? undefined
+    : Array.isArray(b.keywords) ? b.keywords : String(b.keywords).split(',').map((k: string) => k.trim()).filter(Boolean);
+  const stream = await prisma.stream.update({
+    where: { id: req.params.id },
+    data: {
+      ...(b.name !== undefined ? { name: b.name } : {}),
+      ...(kw !== undefined ? { keywords: toJson(kw) } : {}),
+      ...(b.sources !== undefined ? { sources: toJson(b.sources) } : {}),
+      ...(typeof b.isActive === 'boolean' ? { isActive: b.isActive } : {}),
+    },
+  });
+  res.json({ success: true, data: mapStream(stream) });
+});
+
+// Delete a stream and its mentions.
+router.delete('/streams/:id', async (req, res) => {
+  const exists = await prisma.stream.findUnique({ where: { id: req.params.id } });
+  if (!exists) return res.status(404).json({ success: false, error: 'Stream not found' });
+  // Mention.streamId has no cascade — clear its mentions first to avoid an FK error.
+  await prisma.$transaction([
+    prisma.mention.deleteMany({ where: { streamId: req.params.id } }),
+    prisma.stream.delete({ where: { id: req.params.id } }),
+  ]);
+  res.json({ success: true, data: mapStream(exists) });
+});
+
 router.get('/mentions', async (req, res) => {
   const { streamId, sentiment } = req.query;
   const rows = await prisma.mention.findMany({
