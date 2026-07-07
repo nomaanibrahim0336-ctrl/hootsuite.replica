@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useUiStore } from '@/lib/ui-store';
 import { networks } from '@/lib/mock';
 import { NETWORK_META, NETWORK_LIMITS, cn, initials } from '@/lib/utils';
@@ -8,9 +8,11 @@ import type { NetworkType } from '@/lib/types';
 import { Button, NetworkChip } from './ui';
 import { toast } from './Toast';
 import { api } from '@/lib/api';
-import { X, Sparkles, Hash, Lightbulb, Image as ImageIcon, Calendar, Send, Heart, MessageCircle, Repeat2 } from 'lucide-react';
+import { X, Sparkles, Hash, Lightbulb, Image as ImageIcon, Calendar, Send, Heart, MessageCircle, Repeat2, Trash2 } from 'lucide-react';
 
 const TONES = ['professional', 'casual', 'playful', 'bold'] as const;
+const MAX_MEDIA = 4;
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024; // 8MB per file
 
 function aiCaption(topic: string, tone: string) {
   const openers: Record<string, string> = {
@@ -42,6 +44,8 @@ export function Composer() {
   const [tone, setTone] = useState<(typeof TONES)[number]>('professional');
   const [previewNet, setPreviewNet] = useState<NetworkType>('twitter');
   const [ideas, setIdeas] = useState<string[]>([]);
+  const [media, setMedia] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connected = networks.filter((n) => n.connected);
   const minLimit = selected.length ? Math.min(...selected.map((n) => NETWORK_LIMITS[n])) : 280;
@@ -55,7 +59,38 @@ export function Composer() {
     });
   };
 
-  const reset = () => { setContent(''); setWhen(''); setIdeas([]); };
+  const reset = () => { setContent(''); setWhen(''); setIdeas([]); setMedia([]); };
+
+  const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!files.length) return;
+
+    const room = MAX_MEDIA - media.length;
+    if (room <= 0) {
+      toast.error(`You can attach up to ${MAX_MEDIA} images`);
+      return;
+    }
+
+    files.slice(0, room).forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} isn't an image`);
+        return;
+      }
+      if (file.size > MAX_MEDIA_BYTES) {
+        toast.error(`${file.name} is over the 8MB limit`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => setMedia((m) => [...m, reader.result as string]);
+      reader.onerror = () => toast.error(`Couldn't read ${file.name}`);
+      reader.readAsDataURL(file);
+    });
+
+    if (files.length > room) toast.error(`Only the first ${room} image(s) were added (max ${MAX_MEDIA})`);
+  };
+
+  const removeMedia = (idx: number) => setMedia((m) => m.filter((_, i) => i !== idx));
 
   const submit = async (kind: 'draft' | 'schedule' | 'publish') => {
     if (kind !== 'draft' && (!content.trim() || selected.length === 0)) {
@@ -72,6 +107,7 @@ export function Composer() {
       networks: selected,
       status,
       scheduledAt: kind === 'schedule' ? new Date(when).toISOString() : undefined,
+      media,
     }).catch(() => {
       // Live API unreachable — the toast above already confirmed the (local-only) action.
     });
@@ -148,10 +184,43 @@ export function Composer() {
               <Button variant="secondary" size="sm" onClick={() => setIdeas(IDEAS(content))}>
                 <Lightbulb className="h-4 w-4 text-accent-deep" /> Ideas
               </Button>
-              <Button variant="secondary" size="sm"><ImageIcon className="h-4 w-4" /> Media</Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleMediaSelect}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={media.length >= MAX_MEDIA}
+              >
+                <ImageIcon className="h-4 w-4" /> Media{media.length > 0 ? ` (${media.length})` : ''}
+              </Button>
             </div>
             <span className={cn('text-sm', over ? 'text-negative' : 'text-slate-400')}>{content.length} / {minLimit}</span>
           </div>
+
+          {media.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {media.map((src, i) => (
+                <div key={i} className="group relative h-20 w-20 overflow-hidden rounded-lg border border-slate-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`Attachment ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => removeMedia(i)}
+                    aria-label={`Remove attachment ${i + 1}`}
+                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {ideas.length > 0 && (
             <div className="mt-3 rounded-lg border border-slate-200 bg-surface p-3">
@@ -194,7 +263,14 @@ export function Composer() {
                   </div>
                 </div>
                 <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{previewText || 'Your post preview appears here…'}</p>
-                {previewNet === 'instagram' && (
+                {media.length > 0 ? (
+                  <div className={cn('mt-3 grid gap-1', media.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
+                    {media.map((src, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={src} alt={`Attachment ${i + 1}`} className="h-40 w-full rounded-lg object-cover" />
+                    ))}
+                  </div>
+                ) : previewNet === 'instagram' && (
                   <div className="mt-3 flex h-40 items-center justify-center rounded-lg bg-gradient-to-br from-accent-light to-accent/10 text-xs text-slate-400">
                     image / carousel
                   </div>
