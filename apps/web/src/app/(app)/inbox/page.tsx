@@ -122,7 +122,9 @@ export default function InboxPage() {
                     <p className={cn('truncate text-sm', m.isRead ? 'font-medium text-slate-700' : 'font-bold text-slate-900')}>{m.sender.name}</p>
                     <span className="ml-2 shrink-0 text-[11px] text-slate-400">{formatDistanceToNow(new Date(m.timestamp))}</span>
                   </div>
-                  <p className="truncate text-sm text-slate-500">{m.content}</p>
+                  <p className="truncate text-sm text-slate-500">
+                    {m.thread.length ? m.thread[m.thread.length - 1].content : m.content}
+                  </p>
                 </div>
                 {!m.isRead && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-accent" />}
               </button>
