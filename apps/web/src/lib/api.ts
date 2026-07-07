@@ -200,6 +200,7 @@ export const api = {
 
   // Inbox
   getInbox: (status?: string) => request<any[]>(`/inbox${status ? `?status=${status}` : ''}`),
+  syncInbox: () => request<{ stillSyncing: boolean }>('/inbox/sync', { method: 'POST' }),
   markMessageRead: (id: string) => request(`/inbox/${id}/read`, { method: 'PUT' }),
   resolveMessage: (id: string) => request(`/inbox/${id}/resolve`, { method: 'PUT' }),
   saveMessageNote: (id: string, note: string) =>
@@ -216,6 +217,7 @@ export const api = {
   deleteSavedReply: (id: string) => request(`/inbox/saved-replies/${id}`, { method: 'DELETE' }),
 
   // Listening
+  syncListening: () => request<{ stillSyncing: boolean }>('/listening/sync', { method: 'POST' }),
   getStreams: () => request<any[]>('/listening/streams'),
   getStream: (id: string) => request<any>(`/listening/streams/${id}`),
   createStream: (payload: any) => request('/listening/streams', { method: 'POST', body: JSON.stringify(payload) }),

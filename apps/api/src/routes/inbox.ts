@@ -5,6 +5,18 @@ import { syncZernioInbox } from '../zernioInboxSync';
 
 const router = Router();
 
+// Explicit, user-triggered "Sync now" — awaited, so the client knows exactly
+// when fresh data has landed instead of guessing with a fixed delay. Bounded
+// to 12s (under the server's global 15s request timeout): if Zernio is slow,
+// we return `stillSyncing: true` rather than let the raw 503 timeout fire —
+// the sync itself keeps running in the background either way.
+router.post('/sync', async (_req, res) => {
+  const sync = syncZernioInbox({ force: true });
+  const timedOut = Symbol('timeout');
+  const result = await Promise.race([sync, new Promise((r) => setTimeout(() => r(timedOut), 12_000))]);
+  res.json({ success: true, data: { stillSyncing: result === timedOut } });
+});
+
 router.get('/', async (req, res) => {
   // Fire-and-forget: with real accounts this can make several sequential
   // calls to Zernio (one per conversation) and must never block the

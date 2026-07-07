@@ -94,10 +94,14 @@ async function runSync(): Promise<void> {
   }
 }
 
-/** Best-effort, rate-limited sync — safe to call on every GET /api/inbox. */
-export async function syncZernioInbox(): Promise<void> {
+/** Best-effort, rate-limited sync — safe to call on every GET /api/inbox.
+ *  Pass `force: true` (from an explicit user-triggered "Sync now" action) to
+ *  bypass the passive rate-limit gate — a manual refresh should never be a
+ *  silent no-op just because a passive page-load sync ran seconds earlier.
+ *  Concurrent calls (force or not) still collapse onto a single in-flight run. */
+export async function syncZernioInbox(opts: { force?: boolean } = {}): Promise<void> {
   if (!zernio.isConfigured()) return;
-  if (Date.now() - lastSyncAt < MIN_SYNC_INTERVAL_MS) return;
+  if (!opts.force && Date.now() - lastSyncAt < MIN_SYNC_INTERVAL_MS) return;
   if (syncInFlight) return syncInFlight;
 
   lastSyncAt = Date.now();

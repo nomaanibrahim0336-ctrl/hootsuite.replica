@@ -6,6 +6,16 @@ import { syncZernioListening } from '../zernioListeningSync';
 
 const router = Router();
 
+// Explicit, user-triggered "Refresh" — awaited, bounded to 12s (under the
+// server's global 15s request timeout). See routes/inbox.ts for the same
+// pattern and rationale.
+router.post('/sync', async (_req, res) => {
+  const sync = syncZernioListening({ force: true });
+  const timedOut = Symbol('timeout');
+  const result = await Promise.race([sync, new Promise((r) => setTimeout(() => r(timedOut), 12_000))]);
+  res.json({ success: true, data: { stillSyncing: result === timedOut } });
+});
+
 // Sample corpus the ingestion pipeline draws from (stands in for live crawl/API pull).
 const SAMPLE_MENTIONS = [
   { author: 'Ava Patel', user: '@avap', text: 'Just switched to @socialhub and I love the new dashboard!' },

@@ -127,10 +127,12 @@ async function runSync(): Promise<void> {
   }
 }
 
-/** Best-effort, rate-limited sync — safe to call on every GET /listening/mentions. */
-export async function syncZernioListening(): Promise<void> {
+/** Best-effort, rate-limited sync — safe to call on every GET /listening/mentions.
+ *  Pass `force: true` for an explicit user-triggered "Refresh" so a manual
+ *  request is never silently skipped by the passive rate-limit gate. */
+export async function syncZernioListening(opts: { force?: boolean } = {}): Promise<void> {
   if (!zernio.isConfigured()) return;
-  if (Date.now() - lastSyncAt < MIN_SYNC_INTERVAL_MS) return;
+  if (!opts.force && Date.now() - lastSyncAt < MIN_SYNC_INTERVAL_MS) return;
   if (syncInFlight) return syncInFlight;
   lastSyncAt = Date.now();
   syncInFlight = runSync().finally(() => { syncInFlight = null; });

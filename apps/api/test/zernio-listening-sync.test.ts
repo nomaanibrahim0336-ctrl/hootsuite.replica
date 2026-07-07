@@ -146,3 +146,43 @@ describe('Zernio listening sync pulls real mentions & comments into Mention', ()
     await syncZernioListening().catch(() => {});
   });
 });
+
+describe('POST /listening/sync — explicit, awaited "Refresh"', () => {
+  it('awaits the sync and the data is genuinely fresh the instant it responds', async () => {
+    const { token } = await authAs();
+    mockZernio.listMentions.mockResolvedValue([
+      { id: 'sync_m1', platform: 'linkedin', accountUsername: 'brand', authorName: '@fast', content: 'quick mention', publishedAt: new Date().toISOString() },
+    ]);
+
+    const res = await request(app).post('/api/listening/sync').set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.stillSyncing).toBe(false);
+
+    const row = await prisma.mention.findUnique({ where: { externalId: 'mention:sync_m1' } });
+    expect(row).toBeTruthy();
+  });
+
+  it('bypasses the passive rate-limit gate — a manual refresh right after an automatic sync still runs', async () => {
+    const { token } = await authAs();
+    mockZernio.listMentions.mockResolvedValue([]);
+    mockZernio.listCommentedPosts.mockResolvedValue([]);
+
+    await request(app).get('/api/listening/mentions').set(bearer(token));
+    await syncZernioListening().catch(() => {}); // drain that passive sync first
+
+    mockZernio.listMentions.mockResolvedValue([
+      { id: 'sync_m2', platform: 'linkedin', accountUsername: 'brand', authorName: '@fresh', content: 'brand new mention', publishedAt: new Date().toISOString() },
+    ]);
+
+    const res = await request(app).post('/api/listening/sync').set(bearer(token));
+    expect(res.status).toBe(200);
+
+    const row = await prisma.mention.findUnique({ where: { externalId: 'mention:sync_m2' } });
+    expect(row).toBeTruthy();
+  });
+
+  it('requires authentication', async () => {
+    const res = await request(app).post('/api/listening/sync');
+    expect(res.status).toBe(401);
+  });
+});

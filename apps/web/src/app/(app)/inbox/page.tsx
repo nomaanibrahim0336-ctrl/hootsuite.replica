@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { cn, SENTIMENT_META, NETWORK_META } from '@/lib/utils';
 import type { Message, MessageStatus, SavedReply } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2, Pencil, Trash2, Plus, X } from 'lucide-react';
+import { Send, UserPlus, CheckCircle2, Inbox as InboxIcon, StickyNote, Tag, Clock, Sparkles, Loader2, Pencil, Trash2, Plus, X, RefreshCw } from 'lucide-react';
 
 const filters: (MessageStatus | 'all')[] = ['all', 'unread', 'assigned', 'resolved'];
 
@@ -21,6 +21,7 @@ export default function InboxPage() {
   const [note, setNote] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Saved-reply management
   const [managingReplies, setManagingReplies] = useState(false);
@@ -44,6 +45,23 @@ export default function InboxPage() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // /inbox/sync is awaited server-side (a forced, non-rate-limited Zernio
+  // pull) — as soon as it resolves the DB genuinely has fresh data, so we
+  // fetch immediately after with no guessed delay.
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { stillSyncing } = await api.syncInbox();
+      const rows = await api.getInbox();
+      setList(rows ?? []);
+      toast.success(stillSyncing ? 'Synced — a large sync is still finishing in the background' : 'Inbox synced');
+    } catch {
+      toast.error('Could not sync — live API unreachable');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const filtered = filter === 'all' ? list : list.filter((m) => m.status === filter);
   const active = list.find((m) => m.id === activeId) ?? filtered[0];
@@ -130,7 +148,16 @@ export default function InboxPage() {
 
   return (
     <div>
-      <PageHeader title="Unified Inbox" subtitle="All your messages, comments and mentions in one place." />
+      <PageHeader
+        title="Unified Inbox"
+        subtitle="All your messages, comments and mentions in one place."
+        action={
+          <Button variant="secondary" size="sm" onClick={syncNow} disabled={syncing}>
+            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Sync now
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-4">
         {/* Column 1: conversation list */}

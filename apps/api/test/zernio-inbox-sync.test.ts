@@ -171,6 +171,64 @@ describe('Zernio inbox sync (fire-and-forget from GET /api/inbox, tested directl
   });
 });
 
+describe('POST /api/inbox/sync — explicit, awaited "Sync now"', () => {
+  it('awaits the sync and returns stillSyncing:false when it completes quickly', async () => {
+    const { token } = await authAs();
+    mockZernio.listConversations.mockResolvedValue([
+      { id: 'conv_sync_1', platform: 'instagram', accountId: 'acct_1', accountUsername: 'brand', participantId: 'u1', participantName: 'Fast', lastMessage: 'hi', updatedTime: new Date().toISOString(), status: 'active', unreadCount: 1 },
+    ]);
+    mockZernio.listConversationMessages.mockResolvedValue([
+      { id: 'msg_sync_1', conversationId: 'conv_sync_1', accountId: 'acct_1', platform: 'instagram', message: 'hi', senderName: 'Fast', direction: 'incoming', createdAt: new Date().toISOString() },
+    ]);
+
+    const res = await request(app).post('/api/inbox/sync').set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.stillSyncing).toBe(false);
+
+    // Data is genuinely fresh the instant the response comes back — no delay needed.
+    const row = await prisma.message.findUnique({ where: { externalId: 'conv_sync_1' } });
+    expect(row).toBeTruthy();
+  });
+
+  it('bypasses the passive rate-limit gate (force:true) — a manual sync right after an automatic one still runs', async () => {
+    const { token } = await authAs();
+    mockZernio.listConversations.mockResolvedValue([]);
+
+    // A passive sync via GET /inbox (rate-gated) primes lastSyncAt...
+    await request(app).get('/api/inbox').set(bearer(token));
+    await syncZernioInbox().catch(() => {}); // drain that passive sync so it can't be mistaken for the forced one below
+    // ...then update the mock and immediately force a manual sync. If the
+    // rate gate applied here, this would be a no-op and the new conversation
+    // would never appear — that's the exact "stale for 15s" bug being fixed.
+    mockZernio.listConversations.mockResolvedValue([
+      { id: 'conv_sync_2', platform: 'twitter', accountId: 'acct_2', accountUsername: 'brand', participantId: 'u2', participantName: 'Fresh', lastMessage: 'new!', updatedTime: new Date().toISOString(), status: 'active', unreadCount: 1 },
+    ]);
+    mockZernio.listConversationMessages.mockResolvedValue([
+      { id: 'msg_sync_2', conversationId: 'conv_sync_2', accountId: 'acct_2', platform: 'twitter', message: 'new!', senderName: 'Fresh', direction: 'incoming', createdAt: new Date().toISOString() },
+    ]);
+
+    const res = await request(app).post('/api/inbox/sync').set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.stillSyncing).toBe(false);
+
+    const row = await prisma.message.findUnique({ where: { externalId: 'conv_sync_2' } });
+    expect(row).toBeTruthy();
+  });
+
+  it('returns 200 with stillSyncing:false even if Zernio is unconfigured (no-op)', async () => {
+    const { token } = await authAs();
+    mockZernio.isConfigured.mockReturnValue(false);
+    const res = await request(app).post('/api/inbox/sync').set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.stillSyncing).toBe(false);
+  });
+
+  it('requires authentication', async () => {
+    const res = await request(app).post('/api/inbox/sync');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('POST /api/inbox/:id/reply delivers to the real conversation when synced from Zernio', () => {
   it('calls zernio.sendInboxMessage using the stored externalId/accountId', async () => {
     const { token } = await authAs();

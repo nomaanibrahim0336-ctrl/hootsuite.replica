@@ -70,17 +70,17 @@ export default function ListeningPage() {
     }
   };
 
-  // Pull the latest feed. The first request kicks off the (fire-and-forget)
-  // Zernio sync server-side; a second fetch a moment later surfaces it.
+  // Pull the latest feed. /listening/sync is awaited server-side (a forced,
+  // non-rate-limited Zernio pull) — as soon as it resolves the DB genuinely
+  // has fresh data, so we fetch immediately with no guessed delay.
   const refreshFeed = async () => {
     setRefreshing(true);
     try {
-      await api.getMentions(active);           // triggers server-side sync
-      await new Promise((r) => setTimeout(r, 1200));
+      const { stillSyncing } = await api.syncListening();
       const [rows, streamsRes] = await Promise.all([api.getMentions(active), api.getStreams()]);
       setFeed(rows ?? []);
       setStreams(streamsRes ?? []);
-      toast.success('Mentions refreshed');
+      toast.success(stillSyncing ? 'Refreshed — a large sync is still finishing in the background' : 'Mentions refreshed');
     } catch {
       toast.error('Could not refresh — live API unreachable');
     } finally {
