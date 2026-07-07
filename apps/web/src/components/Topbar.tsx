@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Bell, Plus, Sun, Moon, Menu, PauseCircle, PlayCircle } from 'lucide-react';
 import { Avatar } from './ui';
 import { currentUser } from '@/lib/mock';
@@ -9,10 +10,39 @@ import { api } from '@/lib/api';
 import { toast } from './Toast';
 import { cn } from '@/lib/utils';
 
+interface NotificationItem {
+  id: string;
+  action: string;
+  entity: string;
+  createdAt: string;
+}
+
+function describeAction(action: string, entity: string): string {
+  const map: Record<string, string> = {
+    'post.submit': 'A post was submitted for approval',
+    'post.approve': 'A post was approved',
+    'post.reject': 'A post was rejected',
+    'team.invite': 'A new team member was invited',
+    'team.update': 'A team member was updated',
+    'team.remove': 'A team member was removed',
+    'advocacy.create': 'New advocacy content was published',
+    'advocacy.share': 'Advocacy content was shared',
+    pause: 'Publishing was paused',
+    resume: 'Publishing was resumed',
+  };
+  return map[action] || `${action.replace(/\./g, ' ')} · ${entity}`;
+}
+
 export function Topbar() {
+  const router = useRouter();
   const { theme, toggleTheme, openComposer, setPalette, setMobileNav } = useUiStore();
   const [paused, setPaused] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifError, setNotifError] = useState(false);
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.getPublishingStatus()
@@ -21,6 +51,33 @@ export function Topbar() {
         // API unreachable — assume publishing is active.
       });
   }, []);
+
+  useEffect(() => {
+    setLastSeen(typeof window !== 'undefined' ? localStorage.getItem('socialhub_notifs_seen') : null);
+    api.getAudit()
+      .then((rows) => setNotifications(rows.slice(0, 10).map((e: any) => ({ id: e.id, action: e.action, entity: e.entity, createdAt: e.createdAt }))))
+      .catch(() => setNotifError(true));
+  }, []);
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [notifOpen]);
+
+  const unreadCount = lastSeen ? notifications.filter((n) => n.createdAt > lastSeen).length : notifications.length;
+
+  const toggleNotifications = () => {
+    setNotifOpen((v) => !v);
+    if (!notifOpen) {
+      const now = new Date().toISOString();
+      setLastSeen(now);
+      if (typeof window !== 'undefined') localStorage.setItem('socialhub_notifs_seen', now);
+    }
+  };
 
   const togglePause = async () => {
     setBusy(true);
@@ -89,10 +146,50 @@ export function Topbar() {
         >
           {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
-        <button aria-label="Notifications" className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 animate-pulse rounded-full bg-negative" />
-        </button>
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={toggleNotifications}
+            aria-label="Notifications"
+            aria-expanded={notifOpen}
+            className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 animate-pulse rounded-full bg-negative" />
+            )}
+          </button>
+          {notifOpen && (
+            <div className="absolute right-0 top-full z-30 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-surface shadow-2xl">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-800">Notifications</p>
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {notifError && (
+                  <p className="px-4 py-6 text-center text-sm text-slate-400">
+                    Sign in with an owner or admin account to view notifications.
+                  </p>
+                )}
+                {!notifError && notifications.length === 0 && (
+                  <p className="px-4 py-6 text-center text-sm text-slate-400">You're all caught up.</p>
+                )}
+                {!notifError && notifications.map((n) => (
+                  <div key={n.id} className="border-b border-slate-50 px-4 py-3 last:border-0 hover:bg-slate-50">
+                    <p className="text-sm text-slate-700">{describeAction(n.action, n.entity)}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">{new Date(n.createdAt).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+              {!notifError && (
+                <button
+                  onClick={() => { setNotifOpen(false); router.push('/settings'); }}
+                  className="w-full border-t border-slate-100 px-4 py-2.5 text-center text-xs font-medium text-accent-deep hover:bg-slate-50"
+                >
+                  View full audit trail
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Avatar name={currentUser.name} size={34} />
           <div className="hidden text-sm lg:block">

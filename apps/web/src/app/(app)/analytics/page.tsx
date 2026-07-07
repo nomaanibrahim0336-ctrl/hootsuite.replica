@@ -78,6 +78,21 @@ export default function AnalyticsPage() {
     downloadCsv(name, analyticsMetrics);
   };
 
+  const [creatingTemplate, setCreatingTemplate] = useState<string | null>(null);
+
+  const useTemplate = async (templateId: string, name: string) => {
+    setCreatingTemplate(templateId);
+    try {
+      const report = await api.createReport({ name, type: templateId });
+      setReports((r) => [report, ...r]);
+      toast.success(`"${name}" added to Saved reports`);
+    } catch {
+      toast.error('Could not create the report — live API unreachable');
+    } finally {
+      setCreatingTemplate(null);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -179,8 +194,13 @@ export default function AnalyticsPage() {
           <CardHeader title="Report templates" subtitle="Start from a pre-built template" />
           <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
             {REPORT_TEMPLATES.map((t) => (
-              <button key={t.id} className="rounded-xl border border-slate-200 p-4 text-left transition hover:border-accent hover:shadow-sm">
-                <p className="text-sm font-semibold text-slate-800">{t.name}</p>
+              <button
+                key={t.id}
+                onClick={() => useTemplate(t.id, t.name)}
+                disabled={creatingTemplate === t.id}
+                className="rounded-xl border border-slate-200 p-4 text-left transition hover:border-accent hover:shadow-sm disabled:opacity-60"
+              >
+                <p className="text-sm font-semibold text-slate-800">{creatingTemplate === t.id ? 'Adding…' : t.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{t.desc}</p>
               </button>
             ))}

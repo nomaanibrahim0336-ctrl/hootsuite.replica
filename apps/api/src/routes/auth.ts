@@ -48,6 +48,32 @@ router.get('/me', requireAuth, async (req: AuthedRequest, res) => {
   res.json({ success: true, data: publicUser(user) });
 });
 
+router.put(
+  '/me',
+  requireAuth,
+  validateBody({
+    name: { type: 'string', minLength: 1, maxLength: 120 },
+    email: { type: 'string', pattern: rules.EMAIL },
+  }),
+  async (req: AuthedRequest, res) => {
+    const { name, email } = req.body ?? {};
+    if (email) {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing && existing.id !== req.userId) {
+        return res.status(409).json({ success: false, error: 'Email already in use' });
+      }
+    }
+    const user = await prisma.user.update({
+      where: { id: req.userId! },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(email !== undefined ? { email } : {}),
+      },
+    });
+    res.json({ success: true, data: publicUser(user) });
+  },
+);
+
 router.post('/refresh', (req, res) => {
   const { refreshToken } = req.body ?? {};
   const userId = refreshToken && verifyRefresh(refreshToken);

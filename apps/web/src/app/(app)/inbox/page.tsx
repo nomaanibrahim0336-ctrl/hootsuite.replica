@@ -20,6 +20,7 @@ export default function InboxPage() {
   const [reply, setReply] = useState('');
   const [note, setNote] = useState('');
   const [suggesting, setSuggesting] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +41,12 @@ export default function InboxPage() {
 
   const filtered = filter === 'all' ? list : list.filter((m) => m.status === filter);
   const active = list.find((m) => m.id === activeId) ?? filtered[0];
+
+  // Internal note is per-conversation — reload it whenever the active message changes
+  // so switching conversations doesn't leak the previous one's note into the textarea.
+  useEffect(() => {
+    setNote(active?.notes ?? '');
+  }, [active?.id]);
 
   const update = (id: string, patch: Partial<Message>) =>
     setList((l) => l.map((m) => (m.id === id ? { ...m, ...patch } : m)));
@@ -169,7 +176,17 @@ export default function InboxPage() {
                 <Button variant="ghost" size="sm" onClick={() => { update(active.id, { status: 'assigned', assignedTo: 'Sarah Lee' }); toast.info('Assigned to Sarah Lee'); api.assignMessage(active.id, 'Sarah Lee').catch(() => {}); }}>
                   <UserPlus className="h-4 w-4" /> <span className="hidden sm:inline">Assign</span>
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { update(active.id, { status: 'resolved' }); toast.success('Marked resolved'); }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    update(active.id, { status: 'resolved' });
+                    toast.success('Marked resolved');
+                    api.resolveMessage(active.id).catch(() => {
+                      // API unreachable — local resolved state stands as the offline result.
+                    });
+                  }}
+                >
                   <CheckCircle2 className="h-4 w-4" /> <span className="hidden sm:inline">Resolve</span>
                 </Button>
                 <input value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendReply()} placeholder="Type a reply…" className="flex-1 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
@@ -208,10 +225,23 @@ export default function InboxPage() {
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                onBlur={() => note && toast.info('Note saved')}
+                onBlur={async () => {
+                  if (!active || note === (active.notes ?? '')) return;
+                  setSavingNote(true);
+                  try {
+                    await api.saveMessageNote(active.id, note);
+                    update(active.id, { notes: note });
+                    toast.info('Note saved');
+                  } catch {
+                    toast.error('Could not save note — live API unreachable');
+                  } finally {
+                    setSavingNote(false);
+                  }
+                }}
                 rows={3}
                 placeholder="Add a private note (team only)…"
-                className="w-full resize-none rounded-lg border border-slate-200 bg-surface p-2 text-sm outline-none focus:border-accent"
+                disabled={savingNote}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-surface p-2 text-sm outline-none focus:border-accent disabled:opacity-60"
               />
             </div>
           </Card>

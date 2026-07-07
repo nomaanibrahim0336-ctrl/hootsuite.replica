@@ -103,6 +103,7 @@ model Message {
   assignedTo String?
   sentiment  String   @default("neutral")
   isRead     Boolean  @default(false)
+  notes      String?
   timestamp  DateTime @default(now())
 
   replies MessageReply[]

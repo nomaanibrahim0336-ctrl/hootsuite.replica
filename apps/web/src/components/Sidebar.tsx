@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,7 @@ import { useUiStore } from '@/lib/ui-store';
 import { currentUser, messages } from '@/lib/mock';
 import { initials } from '@/lib/utils';
 import { endSession } from '@/lib/api';
+import { HelpDialog } from './HelpDialog';
 import {
   LayoutDashboard,
   Send,
@@ -110,6 +112,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNav } = useUiStore();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <aside
@@ -162,7 +165,14 @@ export function Sidebar() {
           aria-hidden
           className="pointer-events-none absolute -top-px left-3 right-3 h-px bg-gradient-to-r from-transparent via-[#FFB81C]/40 to-transparent"
         />
-        <NavTab href="#" label="Help" icon={HelpCircle} active={false} collapsed={sidebarCollapsed} />
+        <NavTab
+          as="button"
+          onClick={() => setHelpOpen(true)}
+          label="Help"
+          icon={HelpCircle}
+          active={false}
+          collapsed={sidebarCollapsed}
+        />
         <NavTab
           href="/settings"
           label="Settings"
@@ -198,6 +208,7 @@ export function Sidebar() {
           collapsed={sidebarCollapsed}
         />
       </div>
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </aside>
   );
 }

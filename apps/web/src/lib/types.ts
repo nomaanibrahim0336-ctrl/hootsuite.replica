@@ -94,6 +94,7 @@ export interface Message {
   isRead: boolean;
   sentiment: SentimentType;
   thread: MessageReply[];
+  notes?: string;
 }
 
 export interface SavedReply {

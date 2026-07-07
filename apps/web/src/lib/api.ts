@@ -150,6 +150,11 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
 export const api = {
   // Auth
   getMe: () => request<{ id: string; email: string; name: string; role: string; createdAt: string }>('/auth/me'),
+  updateMe: (payload: { name?: string; email?: string }) =>
+    request<{ id: string; email: string; name: string; role: string; createdAt: string }>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   register: (email: string, password: string, name: string) =>
     request<{ user: any; accessToken: string; refreshToken: string }>('/auth/register', {
       method: 'POST',
@@ -194,6 +199,9 @@ export const api = {
   // Inbox
   getInbox: (status?: string) => request<any[]>(`/inbox${status ? `?status=${status}` : ''}`),
   markMessageRead: (id: string) => request(`/inbox/${id}/read`, { method: 'PUT' }),
+  resolveMessage: (id: string) => request(`/inbox/${id}/resolve`, { method: 'PUT' }),
+  saveMessageNote: (id: string, note: string) =>
+    request(`/inbox/${id}/note`, { method: 'PUT', body: JSON.stringify({ note }) }),
   replyMessage: (id: string, content: string) =>
     request(`/inbox/${id}/reply`, { method: 'POST', body: JSON.stringify({ content }) }),
   assignMessage: (id: string, assignedTo: string) =>
@@ -209,6 +217,8 @@ export const api = {
   // Analytics
   getMetrics: () => request<any>('/analytics/metrics'),
   getReports: () => request<any[]>('/analytics/reports'),
+  createReport: (payload: { name: string; type?: string; networks?: string[] }) =>
+    request<any>('/analytics/reports', { method: 'POST', body: JSON.stringify(payload) }),
   exportReport: (id: string, format: string) =>
     request(`/analytics/reports/${id}/export`, { method: 'POST', body: JSON.stringify({ format }) }),
 

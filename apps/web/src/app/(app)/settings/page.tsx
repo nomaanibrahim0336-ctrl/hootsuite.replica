@@ -58,6 +58,7 @@ function SettingsPage() {
   const [netTests, setNetTests] = useState<Record<string, NetTestState>>({});
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [inviting, setInviting] = useState(false);
@@ -272,7 +273,24 @@ function SettingsPage() {
               <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-accent" />
             </div>
             <div className="sm:col-span-2">
-              <Button onClick={() => toast.success('Profile saved')}>Save changes</Button>
+              <Button
+                disabled={savingProfile || !name.trim() || !email.trim()}
+                onClick={async () => {
+                  setSavingProfile(true);
+                  try {
+                    const updated = await api.updateMe({ name: name.trim(), email: email.trim() });
+                    setName(updated.name);
+                    setEmail(updated.email);
+                    toast.success('Profile saved');
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Could not save profile — live API unreachable');
+                  } finally {
+                    setSavingProfile(false);
+                  }
+                }}
+              >
+                {savingProfile ? 'Saving…' : 'Save changes'}
+              </Button>
             </div>
           </div>
         </Card>

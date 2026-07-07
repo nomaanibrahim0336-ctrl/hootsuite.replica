@@ -42,6 +42,7 @@ export const mapMessage = (m: any) => ({
   assignedTo: m.assignedTo ?? undefined,
   sentiment: m.sentiment,
   isRead: m.isRead,
+  notes: m.notes ?? '',
   timestamp: m.timestamp,
   thread: (m.replies ?? []).map((r: any) => ({
     id: r.id,

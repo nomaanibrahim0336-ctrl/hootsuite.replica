@@ -47,6 +47,24 @@ router.put('/:id/assign', async (req, res) => {
   res.json({ success: true, data: mapMessage(updated) });
 });
 
+router.put('/:id/resolve', async (req, res) => {
+  const m = await prisma.message.findUnique({ where: { id: req.params.id } });
+  if (!m) return res.status(404).json({ success: false, error: 'Message not found' });
+  const updated = await prisma.message.update({ where: { id: m.id }, data: { status: 'resolved' }, include: { replies: true } });
+  res.json({ success: true, data: mapMessage(updated) });
+});
+
+router.put('/:id/note', async (req, res) => {
+  const m = await prisma.message.findUnique({ where: { id: req.params.id } });
+  if (!m) return res.status(404).json({ success: false, error: 'Message not found' });
+  const updated = await prisma.message.update({
+    where: { id: m.id },
+    data: { notes: req.body?.note ?? '' },
+    include: { replies: true },
+  });
+  res.json({ success: true, data: mapMessage(updated) });
+});
+
 router.post('/:id/reply', async (req, res) => {
   const m = await prisma.message.findUnique({ where: { id: req.params.id } });
   if (!m) return res.status(404).json({ success: false, error: 'Message not found' });

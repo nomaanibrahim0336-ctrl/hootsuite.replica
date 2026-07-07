@@ -1280,3 +1280,111 @@ describe('Unknown routes', () => {
     expect(res.body.success).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH — profile update (PUT /auth/me)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Auth: update profile (PUT /auth/me)', () => {
+  it('updates name and email and returns the updated user', async () => {
+    const { token } = await authAs();
+    const newEmail = `updated_${Date.now()}@test.com`;
+    const res = await request(app).put('/api/auth/me').set(bearer(token))
+      .send({ name: 'Updated Name', email: newEmail });
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe('Updated Name');
+    expect(res.body.data.email).toBe(newEmail);
+  });
+
+  it('updates only name when email is omitted', async () => {
+    const { token, email } = await authAs();
+    const res = await request(app).put('/api/auth/me').set(bearer(token)).send({ name: 'Only Name' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe('Only Name');
+    expect(res.body.data.email).toBe(email);
+  });
+
+  it('rejects email already in use by another user (409)', async () => {
+    const other = await authAs();
+    const { token } = await authAs();
+    const res = await request(app).put('/api/auth/me').set(bearer(token)).send({ email: other.email });
+    expect(res.status).toBe(409);
+  });
+
+  it('allows keeping your own current email unchanged', async () => {
+    const { token, email } = await authAs();
+    const res = await request(app).put('/api/auth/me').set(bearer(token)).send({ name: 'Same Email', email });
+    expect(res.status).toBe(200);
+    expect(res.body.data.email).toBe(email);
+  });
+
+  it('rejects invalid email format (400)', async () => {
+    const { token } = await authAs();
+    const res = await request(app).put('/api/auth/me').set(bearer(token)).send({ email: 'not-an-email' });
+    expect(res.status).toBe(400);
+  });
+
+  it('requires authentication (401 without token)', async () => {
+    const res = await request(app).put('/api/auth/me').send({ name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INBOX — resolve & internal notes
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Inbox: resolve and internal notes', () => {
+  let token: string;
+  beforeAll(async () => { token = (await authAs()).token; });
+
+  it('resolve sets status to resolved', async () => {
+    const msg = await seedMessage();
+    const res = await request(app).put(`/api/inbox/${msg.id}/resolve`).set(bearer(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('resolved');
+  });
+
+  it('resolve on non-existent message returns 404', async () => {
+    const res = await request(app).put('/api/inbox/00000000-0000-0000-0000-000000000099/resolve').set(bearer(token));
+    expect(res.status).toBe(404);
+  });
+
+  it('save note persists notes field', async () => {
+    const msg = await seedMessage();
+    const res = await request(app).put(`/api/inbox/${msg.id}/note`).set(bearer(token))
+      .send({ note: 'Call back tomorrow' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.notes).toBe('Call back tomorrow');
+  });
+
+  it('note defaults to empty string when notes field is unset', async () => {
+    const msg = await seedMessage();
+    const res = await request(app).get('/api/inbox').set(bearer(token));
+    const found = res.body.data.find((m: any) => m.id === msg.id);
+    expect(found.notes).toBe('');
+  });
+
+  it('save note on non-existent message returns 404', async () => {
+    const res = await request(app).put('/api/inbox/00000000-0000-0000-0000-000000000099/note').set(bearer(token))
+      .send({ note: 'x' });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS — createReport (used by the report-template "use template" buttons)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Analytics: createReport used by report templates', () => {
+  it('creates a report from a template id and it appears in the reports list', async () => {
+    const { token } = await authAs();
+    const res = await request(app).post('/api/analytics/reports').set(bearer(token))
+      .send({ name: 'Performance report', type: 't-perf' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.type).toBe('t-perf');
+
+    const list = await request(app).get('/api/analytics/reports').set(bearer(token));
+    expect(list.body.data.some((r: any) => r.id === res.body.data.id)).toBe(true);
+  });
+});
