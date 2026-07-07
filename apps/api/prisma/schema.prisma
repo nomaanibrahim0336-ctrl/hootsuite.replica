@@ -106,6 +106,12 @@ model Message {
   notes      String?
   timestamp  DateTime @default(now())
 
+  // Set when this row was synced from a live provider (e.g. Zernio) rather
+  // than created locally — externalId is the provider's conversation id,
+  // accountId is the provider's connected-account id needed to reply/mark-read.
+  externalId String? @unique
+  accountId  String?
+
   replies MessageReply[]
 }
 
@@ -114,6 +120,10 @@ model MessageReply {
   content   String
   isFromUs  Boolean  @default(true)
   timestamp DateTime @default(now())
+
+  // Provider message id, set when synced from a live provider — used to
+  // dedupe repeated syncs of the same conversation.
+  externalId String? @unique
 
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId String

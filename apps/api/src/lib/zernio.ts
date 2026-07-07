@@ -105,6 +105,82 @@ export async function publish(text: string, platformNames: string[]): Promise<Ze
   }));
 }
 
+// ─── Unified inbox (Messages) — requires the Inbox addon on the Zernio account ──
+
+export interface ZernioConversation {
+  id: string;
+  platform: string;
+  accountId: string;
+  accountUsername: string;
+  participantId: string;
+  participantName: string;
+  lastMessage: string;
+  updatedTime: string;
+  status: 'active' | 'archived';
+  unreadCount: number;
+}
+
+export interface ZernioInboxMessage {
+  id: string;
+  conversationId: string;
+  accountId: string;
+  platform: string;
+  message: string;
+  senderName: string | null;
+  direction: 'incoming' | 'outgoing';
+  createdAt: string;
+}
+
+/** List DM conversations across all connected accounts. Throws (with a
+ *  message mentioning the Inbox addon) if that addon isn't enabled. */
+export async function listConversations(): Promise<ZernioConversation[]> {
+  const data = await call<{ data: any[] }>('/inbox/conversations?limit=100');
+  return (data.data ?? []).map((c: any) => ({
+    id: c.id,
+    platform: c.platform,
+    accountId: c.accountId,
+    accountUsername: c.accountUsername,
+    participantId: c.participantId,
+    participantName: c.participantName || c.accountUsername || 'Unknown',
+    lastMessage: c.lastMessage ?? '',
+    updatedTime: c.updatedTime,
+    status: c.status ?? 'active',
+    unreadCount: c.unreadCount ?? 0,
+  }));
+}
+
+/** List messages in one conversation, oldest first. */
+export async function listConversationMessages(conversationId: string, accountId: string): Promise<ZernioInboxMessage[]> {
+  const qs = new URLSearchParams({ accountId, limit: '50', sortOrder: 'asc' });
+  const data = await call<{ messages: any[] }>(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages?${qs}`);
+  return (data.messages ?? []).map((m: any) => ({
+    id: m.id,
+    conversationId: m.conversationId,
+    accountId: m.accountId,
+    platform: m.platform,
+    message: m.message ?? '',
+    senderName: m.senderName ?? null,
+    direction: m.direction,
+    createdAt: m.createdAt,
+  }));
+}
+
+/** Send a reply into a real conversation on the connected platform. */
+export async function sendInboxMessage(conversationId: string, accountId: string, message: string): Promise<void> {
+  await call(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ accountId, message }),
+  });
+}
+
+/** Mark all unread messages in a conversation as read (also sends WhatsApp read receipts where supported). */
+export async function markConversationRead(conversationId: string, accountId: string): Promise<void> {
+  await call(`/inbox/conversations/${encodeURIComponent(conversationId)}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ accountId }),
+  });
+}
+
 /** Disconnect a social account.
  *  Accepts either a Zernio accountId (24-char hex) or a platform name (slower — requires a listAccounts lookup). */
 export async function disconnect(accountIdOrPlatform: string): Promise<void> {

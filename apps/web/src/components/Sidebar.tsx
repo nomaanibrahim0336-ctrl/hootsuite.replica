@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useUiStore } from '@/lib/ui-store';
-import { currentUser, messages } from '@/lib/mock';
+import { currentUser } from '@/lib/mock';
 import { initials } from '@/lib/utils';
-import { endSession } from '@/lib/api';
+import { api, endSession } from '@/lib/api';
 import { HelpDialog } from './HelpDialog';
 import {
   LayoutDashboard,
@@ -27,18 +27,18 @@ import {
   LogOut,
 } from 'lucide-react';
 
-const unreadCount = messages.filter((m) => !m.isRead).length;
-
-const nav = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/ai-studio', label: 'AI Studio', icon: Sparkles },
-  { href: '/publisher', label: 'Publisher', icon: Send },
-  { href: '/calendar', label: 'Planner', icon: CalendarDays },
-  { href: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },
-  { href: '/listening', label: 'Listening', icon: Radio },
-  { href: '/analytics', label: 'Analytics', icon: BarChart2 },
-  { href: '/amplify', label: 'Amplify', icon: Megaphone },
-];
+function buildNav(unreadCount: number) {
+  return [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/ai-studio', label: 'AI Studio', icon: Sparkles },
+    { href: '/publisher', label: 'Publisher', icon: Send },
+    { href: '/calendar', label: 'Planner', icon: CalendarDays },
+    { href: '/inbox', label: 'Inbox', icon: Inbox, badge: unreadCount },
+    { href: '/listening', label: 'Listening', icon: Radio },
+    { href: '/analytics', label: 'Analytics', icon: BarChart2 },
+    { href: '/amplify', label: 'Amplify', icon: Megaphone },
+  ];
+}
 
 /**
  * Gradient-bordered tab: a 1px gradient shell around the link keeps layout
@@ -113,6 +113,19 @@ export function Sidebar() {
   const router = useRouter();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNav } = useUiStore();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [userName, setUserName] = useState(currentUser.name);
+
+  useEffect(() => {
+    api.getInbox('unread').then((rows) => setUnreadCount(rows.length)).catch(() => {
+      // API unreachable — leave at 0 rather than showing a stale/fake count.
+    });
+    api.getMe().then((u) => setUserName(u.name)).catch(() => {
+      // Fall back to the placeholder name if the API is unreachable.
+    });
+  }, [pathname]);
+
+  const nav = buildNav(unreadCount);
 
   return (
     <aside
@@ -184,10 +197,10 @@ export function Sidebar() {
         <div className={cn('flex items-center gap-2 rounded-lg px-3 py-2', sidebarCollapsed && 'justify-center px-0')}>
           <span className="rounded-full bg-gradient-to-br from-[#FFB81C] to-[#FF4C46] p-px">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2B2D35] text-xs font-semibold text-white">
-              {initials(currentUser.name)}
+              {initials(userName)}
             </span>
           </span>
-          {!sidebarCollapsed && <span className="truncate text-xs text-[#B0B8C4]">{currentUser.name}</span>}
+          {!sidebarCollapsed && <span className="truncate text-xs text-[#B0B8C4]">{userName}</span>}
         </div>
 
         <NavTab
