@@ -1029,6 +1029,83 @@ describe('AI: all endpoints with mock provider', () => {
   });
 });
 
+describe('AI: connect/disconnect a provider API key from Settings', () => {
+  let ownerToken: string;
+  let viewerToken: string;
+
+  beforeAll(async () => {
+    const owner = await authAs('owner');
+    const viewer = await authAs('viewer');
+    ownerToken = owner.token;
+    viewerToken = viewer.token;
+  });
+
+  it('PUT /ai/providers/gemini/key stores the key and marks it configured', async () => {
+    const res = await request(app).put('/api/ai/providers/gemini/key').set(bearer(ownerToken))
+      .send({ apiKey: 'test-gemini-key' });
+    expect(res.status).toBe(200);
+    const gemini = res.body.data.find((p: any) => p.id === 'gemini');
+    expect(gemini.configured).toBe(true);
+    expect(gemini.hasStoredKey).toBe(true);
+  });
+
+  it('PUT /ai/providers/:id/key without apiKey returns 400', async () => {
+    const res = await request(app).put('/api/ai/providers/gemini/key').set(bearer(ownerToken)).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /ai/providers/custom/key requires a baseUrl too', async () => {
+    const res = await request(app).put('/api/ai/providers/custom/key').set(bearer(ownerToken))
+      .send({ apiKey: 'test-custom-key' });
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /ai/providers/custom/key with apiKey + baseUrl succeeds', async () => {
+    const res = await request(app).put('/api/ai/providers/custom/key').set(bearer(ownerToken))
+      .send({ apiKey: 'test-custom-key', baseUrl: 'https://my-llm.example.com/v1' });
+    expect(res.status).toBe(200);
+    const custom = res.body.data.find((p: any) => p.id === 'custom');
+    expect(custom.configured).toBe(true);
+  });
+
+  it('PUT /ai/providers/mock/key rejects the non-connectable mock provider', async () => {
+    const res = await request(app).put('/api/ai/providers/mock/key').set(bearer(ownerToken))
+      .send({ apiKey: 'x' });
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /ai/providers/:id/key without permission returns 403 (viewer)', async () => {
+    const res = await request(app).put('/api/ai/providers/gemini/key').set(bearer(viewerToken))
+      .send({ apiKey: 'x' });
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /ai/providers/:id/key removes the stored key', async () => {
+    await request(app).put('/api/ai/providers/deepseek/key').set(bearer(ownerToken))
+      .send({ apiKey: 'test-deepseek-key' });
+    const del = await request(app).delete('/api/ai/providers/deepseek/key').set(bearer(ownerToken));
+    expect(del.status).toBe(200);
+    const deepseek = del.body.data.find((p: any) => p.id === 'deepseek');
+    expect(deepseek.configured).toBe(false);
+    expect(deepseek.hasStoredKey).toBe(false);
+  });
+
+  it('DELETE /ai/providers/:id/key without permission returns 403 (viewer)', async () => {
+    const res = await request(app).delete('/api/ai/providers/gemini/key').set(bearer(viewerToken));
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /ai/providers reflects a stored key after connecting', async () => {
+    await request(app).put('/api/ai/providers/openai/key').set(bearer(ownerToken))
+      .send({ apiKey: 'test-openai-key' });
+    const res = await request(app).get('/api/ai/providers').set(bearer(ownerToken));
+    expect(res.status).toBe(200);
+    const openai = res.body.data.find((p: any) => p.id === 'openai');
+    expect(openai.configured).toBe(true);
+    expect(openai.hasStoredKey).toBe(true);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OAUTH ROUTES
 // ─────────────────────────────────────────────────────────────────────────────

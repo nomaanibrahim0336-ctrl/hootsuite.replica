@@ -50,6 +50,8 @@ export interface AiProvider {
   models: string[];
   configured: boolean;
   envKey?: string;
+  envConfigured?: boolean;
+  hasStoredKey?: boolean;
 }
 
 export const API_BASE = BASE;
@@ -255,6 +257,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ provider, model }),
     }),
+  aiConnectProvider: (id: string, apiKey: string, baseUrl?: string) =>
+    request<AiProvider[]>(`/ai/providers/${id}/key`, {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey, baseUrl }),
+    }),
+  aiDisconnectProvider: (id: string) =>
+    request<AiProvider[]>(`/ai/providers/${id}/key`, { method: 'DELETE' }),
 
   // Teams
   getTeam: () => request<any[]>('/teams'),

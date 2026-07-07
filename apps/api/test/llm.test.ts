@@ -22,6 +22,7 @@ function resetEnv() {
 
 async function clearSettings() {
   await prisma.appSetting.deleteMany({ where: { key: { in: ['llm.provider', 'llm.model'] } } });
+  await prisma.llmCredential.deleteMany({});
 }
 
 afterAll(async () => {
@@ -205,7 +206,7 @@ describe('LLM: mock provider is deterministic', () => {
 
   it('mockProvider.isConfigured() is always true', async () => {
     const { mockProvider } = await import('../src/llm/adapters/mock');
-    expect(mockProvider.isConfigured()).toBe(true);
+    expect(await mockProvider.isConfigured()).toBe(true);
   });
 
   it('mockProvider truncates prompts longer than 240 chars', async () => {
@@ -213,5 +214,84 @@ describe('LLM: mock provider is deterministic', () => {
     const longPrompt = 'x'.repeat(300);
     const text = await mockProvider.complete(longPrompt);
     expect(text.length).toBeLessThanOrEqual(240 + '【mock】'.length);
+  });
+});
+
+describe('LLM: DB-stored credentials (Connect/Disconnect from the app UI)', () => {
+  it('a provider with no env var becomes configured once a key is stored', async () => {
+    const { setStoredCredential, getProvidersMeta } = await import('../src/llm');
+    let meta = await getProvidersMeta();
+    expect(meta.find((p) => p.id === 'gemini')?.configured).toBe(false);
+
+    await setStoredCredential('gemini', 'stored-gemini-key');
+    meta = await getProvidersMeta();
+    const gemini = meta.find((p) => p.id === 'gemini');
+    expect(gemini?.configured).toBe(true);
+    expect(gemini?.hasStoredKey).toBe(true);
+    expect(gemini?.envConfigured).toBe(false);
+  });
+
+  it('complete() uses the stored key when no env var is set', async () => {
+    const { setStoredCredential, complete } = await import('../src/llm');
+    await setStoredCredential('gemini', 'stored-gemini-key');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Hi from stored-key Gemini' }] } }] }),
+    }) as any;
+
+    const result = await complete('Say hi');
+    expect(result.provider).toBe('gemini');
+    expect(result.fallback).toBe(false);
+    expect(result.text).toBe('Hi from stored-key Gemini');
+    // The stored key should be used as the Gemini API's `key` query param.
+    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    expect(calledUrl).toContain('key=stored-gemini-key');
+  });
+
+  it('an env var always wins over a stored key', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-env-wins';
+    const { setStoredCredential, getProvidersMeta } = await import('../src/llm');
+    await setStoredCredential('claude', 'stored-key-should-be-ignored');
+
+    const meta = await getProvidersMeta();
+    const claude = meta.find((p) => p.id === 'claude');
+    expect(claude?.configured).toBe(true);
+    expect(claude?.envConfigured).toBe(true);
+    // Still reports the stored key exists, even though env takes priority for actual use.
+    expect(claude?.hasStoredKey).toBe(true);
+  });
+
+  it('deleteStoredCredential removes it and the provider reverts to unconfigured', async () => {
+    const { setStoredCredential, deleteStoredCredential, getProvidersMeta } = await import('../src/llm');
+    await setStoredCredential('deepseek', 'stored-deepseek-key');
+    let meta = await getProvidersMeta();
+    expect(meta.find((p) => p.id === 'deepseek')?.configured).toBe(true);
+
+    await deleteStoredCredential('deepseek');
+    meta = await getProvidersMeta();
+    const deepseek = meta.find((p) => p.id === 'deepseek');
+    expect(deepseek?.configured).toBe(false);
+    expect(deepseek?.hasStoredKey).toBe(false);
+  });
+
+  it('the custom provider requires both a stored apiKey and baseUrl to be usable', async () => {
+    const { setStoredCredential, complete } = await import('../src/llm');
+    await setStoredCredential('custom', 'stored-custom-key', 'https://my-llm.example.com/v1');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'Hi from custom' } }] }),
+    }) as any;
+
+    const result = await complete('Say hi');
+    expect(result.provider).toBe('custom');
+    expect(result.text).toBe('Hi from custom');
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('https://my-llm.example.com/v1/chat/completions');
+  });
+
+  it('setActiveConfig lets you select a provider that is only configured via a stored key', async () => {
+    const { setStoredCredential, setActiveConfig, resolveActiveProviderId } = await import('../src/llm');
+    await setStoredCredential('openai', 'stored-openai-key');
+    await setActiveConfig('openai');
+    expect(await resolveActiveProviderId()).toBe('openai');
   });
 });

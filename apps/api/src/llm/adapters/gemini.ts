@@ -1,4 +1,5 @@
 import { LLMProvider, CompleteOptions } from '../types';
+import { resolveApiKey, isProviderConfigured } from '../credentials';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 
@@ -6,9 +7,9 @@ export const geminiProvider: LLMProvider = {
   id: 'gemini',
   label: 'Gemini (Google)',
   models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  isConfigured: () => !!process.env.GEMINI_API_KEY,
+  isConfigured: () => isProviderConfigured('gemini', !!process.env.GEMINI_API_KEY),
   async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
-    const key = process.env.GEMINI_API_KEY;
+    const key = await resolveApiKey('gemini', process.env.GEMINI_API_KEY);
     if (!key) throw new Error('GEMINI_API_KEY not set');
     const model = process.env.LLM_MODEL || DEFAULT_MODEL;
 

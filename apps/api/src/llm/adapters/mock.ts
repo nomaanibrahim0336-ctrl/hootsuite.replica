@@ -5,7 +5,7 @@ export const mockProvider: LLMProvider = {
   id: 'mock',
   label: 'Built-in (offline)',
   models: ['mock-1'],
-  isConfigured: () => true,
+  isConfigured: async () => true,
   async complete(prompt: string): Promise<string> {
     return `【mock】${prompt.slice(0, 240)}`;
   },

@@ -1,4 +1,5 @@
 import { LLMProvider, CompleteOptions } from '../types';
+import { resolveApiKey, isProviderConfigured } from '../credentials';
 
 // Shared OpenAI-compatible chat-completions caller (reused by OpenAI, DeepSeek, Custom).
 export async function openAICompatibleComplete(
@@ -33,9 +34,9 @@ export const openaiProvider: LLMProvider = {
   id: 'openai',
   label: 'OpenAI (GPT)',
   models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-  isConfigured: () => !!process.env.OPENAI_API_KEY,
+  isConfigured: () => isProviderConfigured('openai', !!process.env.OPENAI_API_KEY),
   async complete(prompt, opts) {
-    const key = process.env.OPENAI_API_KEY;
+    const key = await resolveApiKey('openai', process.env.OPENAI_API_KEY);
     if (!key) throw new Error('OPENAI_API_KEY not set');
     const model = process.env.LLM_MODEL || DEFAULT_MODEL;
     return openAICompatibleComplete('https://api.openai.com/v1', key, model, prompt, opts);

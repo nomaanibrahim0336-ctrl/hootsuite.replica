@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { complete, getStatus, getProvidersMeta, setActiveConfig, ProviderId } from '../llm';
+import { complete, getStatus, getProvidersMeta, setActiveConfig, setStoredCredential, deleteStoredCredential, ProviderId } from '../llm';
 import { classifySentiment } from '../sentiment';
 import { requirePermission, PERMISSIONS } from '../rbac';
+
+const CONNECTABLE_PROVIDERS: ProviderId[] = ['claude', 'openai', 'gemini', 'deepseek', 'custom'];
 
 const router = Router();
 
@@ -23,6 +25,32 @@ router.put('/config', requirePermission(PERMISSIONS.MANAGE_SETTINGS), async (req
   } catch (e) {
     res.status(400).json({ success: false, error: (e as Error).message });
   }
+});
+
+// --- Connect / disconnect a provider by entering its API key in the app ---
+router.put('/providers/:id/key', requirePermission(PERMISSIONS.MANAGE_SETTINGS), async (req, res) => {
+  const id = req.params.id as ProviderId;
+  if (!CONNECTABLE_PROVIDERS.includes(id)) {
+    return res.status(400).json({ success: false, error: `Unknown or non-connectable provider: ${id}` });
+  }
+  const { apiKey, baseUrl } = req.body ?? {};
+  if (!apiKey || typeof apiKey !== 'string') {
+    return res.status(400).json({ success: false, error: 'apiKey is required' });
+  }
+  if (id === 'custom' && (!baseUrl || typeof baseUrl !== 'string')) {
+    return res.status(400).json({ success: false, error: 'baseUrl is required for the custom provider' });
+  }
+  await setStoredCredential(id, apiKey, id === 'custom' ? baseUrl : undefined);
+  res.json({ success: true, data: await getProvidersMeta() });
+});
+
+router.delete('/providers/:id/key', requirePermission(PERMISSIONS.MANAGE_SETTINGS), async (req, res) => {
+  const id = req.params.id as ProviderId;
+  if (!CONNECTABLE_PROVIDERS.includes(id)) {
+    return res.status(400).json({ success: false, error: `Unknown or non-connectable provider: ${id}` });
+  }
+  await deleteStoredCredential(id);
+  res.json({ success: true, data: await getProvidersMeta() });
 });
 
 // --- Generation ---

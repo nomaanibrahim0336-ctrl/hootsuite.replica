@@ -1,4 +1,5 @@
 import { LLMProvider, CompleteOptions } from '../types';
+import { resolveApiKey, isProviderConfigured } from '../credentials';
 
 const DEFAULT_MODEL = 'claude-opus-4-8';
 
@@ -6,9 +7,9 @@ export const claudeProvider: LLMProvider = {
   id: 'claude',
   label: 'Claude (Anthropic)',
   models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
-  isConfigured: () => !!process.env.ANTHROPIC_API_KEY,
+  isConfigured: () => isProviderConfigured('claude', !!process.env.ANTHROPIC_API_KEY),
   async complete(prompt: string, opts: CompleteOptions = {}): Promise<string> {
-    const key = process.env.ANTHROPIC_API_KEY;
+    const key = await resolveApiKey('claude', process.env.ANTHROPIC_API_KEY);
     if (!key) throw new Error('ANTHROPIC_API_KEY not set');
     const model = process.env.LLM_MODEL || DEFAULT_MODEL;
 

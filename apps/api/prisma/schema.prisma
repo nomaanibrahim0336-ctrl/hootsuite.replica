@@ -179,6 +179,17 @@ model AppSetting {
   value String
 }
 
+// LLM provider API keys entered through the app UI (Settings → AI &
+// Automation → Connect). An env var of the same purpose (e.g.
+// ANTHROPIC_API_KEY) always takes priority when both are present — this
+// table only matters when no env var is set for that provider.
+model LlmCredential {
+  provider  String   @id // 'claude' | 'openai' | 'gemini' | 'deepseek' | 'custom'
+  apiKey    String
+  baseUrl   String? // 'custom' provider only
+  updatedAt DateTime @updatedAt
+}
+
 model TeamMember {
   id       String   @id @default(uuid())
   name     String
